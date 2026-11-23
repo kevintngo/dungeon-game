@@ -1,0 +1,4182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TORCHLIGHT DEPTHS</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230b1019'/%3E%3Crect x='7' y='8' width='2' height='6' fill='%236c492e'/%3E%3Crect x='6' y='4' width='4' height='4' fill='%23ff8528'/%3E%3Crect x='7' y='3' width='2' height='3' fill='%23ffe38a'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #070a10;
+    font-family: 'Press Start 2P', 'Courier New', monospace;
+    color: #d7ccb8;
+    image-rendering: pixelated;
+  }
+  canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    outline: none;
+  }
+
+  /* Crisp Pixel HUD */
+  #hud {
+    position: fixed;
+    top: 14px;
+    left: 14px;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+  }
+  .hud-panel {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 8px 12px;
+    background: rgba(11, 14, 21, 0.74);
+    border: 2px solid #2b3442;
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 195, 120, 0.08);
+    backdrop-filter: blur(2px);
+  }
+  .hud-hearts { display: flex; align-items: center; gap: 3px; }
+  .hud-stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    color: #cfc4b0;
+    text-shadow: 1px 2px 0 #07090d;
+    white-space: nowrap;
+  }
+  .hud-stat .val { color: #f0d7a8; }
+  .hud-stat.depth-stat .val { color: #9ec0e0; }
+  .hud-stat.slain-stat .val { color: #d68576; }
+  .hud-stat.key-stat { color: #f3c45f; display: none; }
+  .hud-stat.key-stat.active {
+    display: flex;
+    animation: keyPulse 1.6s ease-in-out infinite;
+  }
+  @keyframes keyPulse {
+    0%, 100% { filter: drop-shadow(0 0 2px rgba(243, 196, 95, 0.45)); }
+    50% { filter: drop-shadow(0 0 6px rgba(255, 215, 110, 0.95)); }
+  }
+  .px-icon { width: 14px; height: 14px; flex-shrink: 0; shape-rendering: crispEdges; }
+  .heart-icon { width: 14px; height: 13px; shape-rendering: crispEdges; }
+
+  #boss-bar-wrap {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    pointer-events: none;
+    min-width: 240px;
+  }
+  #boss-bar-wrap.visible { display: flex; }
+  #boss-name {
+    font-size: 9px;
+    color: #e6a68c;
+    letter-spacing: 1px;
+    text-shadow: 1px 2px 0 #07090d;
+  }
+  #boss-bar-bg {
+    width: 240px;
+    height: 10px;
+    background: rgba(12, 14, 20, 0.85);
+    border: 2px solid #4d3538;
+    padding: 1px;
+  }
+  #boss-bar-fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(180deg, #c74a3c 0%, #8f231e 100%);
+    transition: width 0.12s linear;
+  }
+
+  #toast {
+    position: fixed;
+    top: 66px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 22;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    color: #ecd2a4;
+    text-shadow: 0 2px 0 #05070a, 0 0 12px rgba(255, 145, 55, 0.45);
+    background: rgba(10, 13, 19, 0.65);
+    border-top: 1px solid rgba(225, 165, 95, 0.35);
+    border-bottom: 1px solid rgba(225, 165, 95, 0.35);
+    padding: 7px 18px;
+    opacity: 0;
+    transition: opacity 0.45s ease;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  #toast.show { opacity: 1; }
+
+  #ctrl-hint {
+    position: fixed;
+    bottom: 14px;
+    left: 14px;
+    z-index: 20;
+    font-size: 8px;
+    letter-spacing: 0.7px;
+    color: rgba(176, 188, 205, 0.48);
+    text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.8);
+    pointer-events: none;
+    transition: color 0.3s ease;
+  }
+  #ctrl-hint.manual { color: rgba(242, 185, 102, 0.88); }
+
+  #sound-btn {
+    position: fixed;
+    bottom: 12px;
+    right: 14px;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: rgba(12, 16, 24, 0.72);
+    border: 1px solid rgba(132, 148, 174, 0.32);
+    color: rgba(214, 204, 186, 0.78);
+    font-family: inherit;
+    font-size: 8px;
+    letter-spacing: 0.6px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, opacity 0.3s;
+  }
+  #sound-btn:hover { border-color: rgba(240, 176, 94, 0.72); color: #f3d7a8; }
+  #sound-btn.enabled { opacity: 0.46; }
+  #sound-btn.enabled:hover { opacity: 0.92; }
+
+  #fade-overlay {
+    position: fixed;
+    inset: 0;
+    background: #05070b;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 25;
+    transition: opacity 0.42s ease;
+  }
+  #fade-overlay.active { opacity: 1; }
+</style>
+</head>
+<body>
+
+<canvas id="gl-canvas"></canvas>
+
+<div id="hud">
+  <div class="hud-panel">
+    <div id="hud-hearts" class="hud-hearts" aria-label="Health"></div>
+    <div id="hud-potions" class="hud-stat" title="Potions">
+      <svg class="px-icon" viewBox="0 0 12 12">
+        <rect x="4" y="1" width="4" height="1" fill="#a88c68"/>
+        <rect x="5" y="2" width="2" height="2" fill="#9fb2c7"/>
+        <rect x="3" y="4" width="6" height="6" fill="#4c1b22"/>
+        <rect x="4" y="5" width="4" height="4" fill="#c9363c"/>
+        <rect x="4" y="5" width="2" height="2" fill="#f07268"/>
+        <rect x="4" y="10" width="4" height="1" fill="#321116"/>
+      </svg>
+      <span class="val" id="val-potions">1</span>
+    </div>
+    <div id="hud-key" class="hud-stat key-stat">
+      <svg class="px-icon" viewBox="0 0 12 12">
+        <rect x="2" y="3" width="4" height="4" fill="#d9a036"/>
+        <rect x="3" y="4" width="2" height="2" fill="#181c24"/>
+        <rect x="6" y="4" width="5" height="2" fill="#f2c861"/>
+        <rect x="8" y="6" width="1" height="2" fill="#d9a036"/>
+        <rect x="10" y="6" width="1" height="2" fill="#d9a036"/>
+      </svg>
+      <span>KEY</span>
+    </div>
+  </div>
+  <div class="hud-panel">
+    <div class="hud-stat">
+      <svg class="px-icon" viewBox="0 0 12 12">
+        <rect x="3" y="2" width="6" height="8" fill="#c88d2c"/>
+        <rect x="2" y="3" width="8" height="6" fill="#e5b449"/>
+        <rect x="4" y="3" width="4" height="6" fill="#f5d376"/>
+        <rect x="5" y="4" width="2" height="4" fill="#c88d2c"/>
+      </svg>
+      <span class="val" id="val-gold">0</span>
+    </div>
+    <div class="hud-stat depth-stat">
+      <svg class="px-icon" viewBox="0 0 12 12">
+        <rect x="1" y="2" width="10" height="2" fill="#6f87a3"/>
+        <rect x="3" y="4" width="8" height="2" fill="#576d87"/>
+        <rect x="5" y="6" width="6" height="2" fill="#43566d"/>
+        <rect x="7" y="8" width="4" height="2" fill="#2e3d4f"/>
+      </svg>
+      <span>DEPTH <span class="val" id="val-depth">1</span></span>
+    </div>
+    <div class="hud-stat slain-stat">
+      <svg class="px-icon" viewBox="0 0 12 12">
+        <rect x="3" y="2" width="6" height="5" fill="#cfc8ba"/>
+        <rect x="2" y="3" width="8" height="3" fill="#cfc8ba"/>
+        <rect x="3" y="4" width="2" height="2" fill="#1b181c"/>
+        <rect x="7" y="4" width="2" height="2" fill="#1b181c"/>
+        <rect x="4" y="7" width="4" height="2" fill="#afa696"/>
+        <rect x="4" y="9" width="1" height="1" fill="#cfc8ba"/>
+        <rect x="6" y="9" width="1" height="1" fill="#cfc8ba"/>
+      </svg>
+      <span class="val" id="val-slain">0</span>
+    </div>
+  </div>
+</div>
+
+<div id="boss-bar-wrap">
+  <div id="boss-name">THE BONE WARDEN</div>
+  <div id="boss-bar-bg"><div id="boss-bar-fill"></div></div>
+</div>
+
+<div id="toast">DEPTH 1 — THE DAMP CATACOMBS</div>
+
+<div id="ctrl-hint">AUTO-PLAY · WASD / ARROWS + SPACE TO TAKE OVER</div>
+
+<button id="sound-btn" type="button" aria-label="Toggle sound">
+  <svg width="12" height="12" viewBox="0 0 12 12" shape-rendering="crispEdges">
+    <rect x="1" y="4" width="2" height="4" fill="currentColor"/>
+    <rect x="3" y="3" width="2" height="6" fill="currentColor"/>
+    <rect x="5" y="2" width="1" height="8" fill="currentColor"/>
+    <rect x="8" y="4" width="1" height="4" fill="currentColor"/>
+    <rect x="10" y="3" width="1" height="6" fill="currentColor"/>
+  </svg>
+  <span id="sound-label">CLICK FOR SOUND</span>
+</button>
+
+<div id="fade-overlay"></div>
+
+<script>
+(() => {
+'use strict';
+
+// ============================================================================
+// TORCHLIGHT DEPTHS — 100% Pure WebGL2 GLSL All-Shaders Isometric Dungeon
+// Zero 3D libraries, zero polygon meshes, zero image/canvas textures.
+// Everything is SDF raymarched, lit, shadowed, reflected & tilt-shifted in GLSL.
+// ============================================================================
+
+const TILE = 2.0;
+const GRID_W = 36;
+const GRID_H = 36;
+const NAV_SCALE = 2;
+const NAV_W = GRID_W * NAV_SCALE;
+const NAV_H = GRID_H * NAV_SCALE;
+
+// Logical dungeon cell types
+const CELL_VOID = 0;
+const CELL_WALL = 1;
+const CELL_FLOOR = 2;
+const CELL_DOOR = 3;
+const CELL_LOCKED_DOOR = 4;
+const CELL_STAIRS = 5;
+const CELL_CELL_BARS = 6;
+
+// GPU Map Texture R-channel codes
+const G_VOID = 0;
+const G_BACK_WALL = 1;
+const G_CUT_WALL = 2;
+const G_FLOOR = 3;
+const G_DOOR_H = 4;
+const G_DOOR_V = 5;
+const G_LOCK_H = 6;
+const G_LOCK_V = 7;
+const G_STAIRS = 8;
+const G_CELL = 9;
+
+// GPU Map Texture G-channel prop codes
+const P_NONE = 0;
+const P_PILLAR = 1;
+const P_BARREL = 2;
+const P_CRATE = 3;
+const P_BRAZIER = 4;
+const P_CHEST = 5;
+const P_RUBBLE = 6;
+const P_BONES = 7;
+const P_SPIKES = 8;
+const P_BLADE_X = 9;
+const P_BLADE_Z = 10;
+const P_RUNE = 11;
+const P_MOON = 12;
+
+const MAX_MOBS = 14;
+const MAX_ITEMS = 12;
+const MAX_GIBS = 18;
+const MAX_EMBERS = 28;
+const MAX_WARM_LIGHTS = 6;
+const MAX_COLD_LIGHTS = 2;
+
+const DEPTH_TITLES = [
+  'THE DAMP CATACOMBS',
+  'CELLS OF THE FORGOTTEN',
+  'HALL OF THE BONE WARDEN',
+  'SUNKEN RUNE VAULTS',
+  'THE RUSTED OSSUARY',
+  'SANCTUM OF THE DREAD LORD',
+  'WEEPING STONE DEEP',
+  'THE IRON GAUNTLET',
+  'THRONE OF ASH AND MARROW'
+];
+
+function rand(min = 0, max = 1) { return min + Math.random() * (max - min); }
+function randInt(min, max) { return Math.floor(rand(min, max + 1)); }
+function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function angleDiff(a, b) {
+  let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+// ============================================================================
+// 1. SYNTHESIZED WEB AUDIO ENGINE (Clean crackle & SFX — zero buzzing drone!)
+// ============================================================================
+class SoundEngine {
+  constructor() {
+    this.ctx = null;
+    this.master = null;
+    this.noiseBuf = null;
+    this.enabled = false;
+    this.muted = false;
+    this.crackleTimer = 0;
+    this.torchBedGain = null;
+    this.lastStepTime = 0;
+    this.lastHitTime = 0;
+  }
+
+  unlock() {
+    if (!this.ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
+      this.ctx = new AC();
+      const comp = this.ctx.createDynamicsCompressor();
+      comp.threshold.value = -16;
+      comp.knee.value = 18;
+      comp.ratio.value = 5;
+      comp.attack.value = 0.004;
+      comp.release.value = 0.14;
+
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.56;
+      this.master.connect(comp);
+      comp.connect(this.ctx.destination);
+
+      const sr = this.ctx.sampleRate;
+      this.noiseBuf = this.ctx.createBuffer(1, sr * 2, sr);
+      const data = this.noiseBuf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+
+      this._startAmbience();
+    }
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+    this.enabled = true;
+    this.muted = false;
+    this._syncGain();
+    return true;
+  }
+
+  toggle() {
+    if (!this.enabled) { this.unlock(); return true; }
+    this.muted = !this.muted;
+    this._syncGain();
+    return !this.muted;
+  }
+
+  _syncGain() {
+    if (!this.master || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    this.master.gain.cancelScheduledValues(now);
+    this.master.gain.setTargetAtTime(this.muted ? 0.0001 : 0.56, now, 0.05);
+  }
+
+  _startAmbience() {
+    const ctx = this.ctx;
+    // Soft warm torch fire air bed (filtered noise only, zero buzzing oscillators)
+    const bedSrc = ctx.createBufferSource();
+    bedSrc.buffer = this.noiseBuf;
+    bedSrc.loop = true;
+    const bedBP = ctx.createBiquadFilter();
+    bedBP.type = 'bandpass';
+    bedBP.frequency.value = 380;
+    bedBP.Q.value = 0.85;
+    this.torchBedGain = ctx.createGain();
+    this.torchBedGain.gain.value = 0.032;
+    bedSrc.connect(bedBP);
+    bedBP.connect(this.torchBedGain);
+    this.torchBedGain.connect(this.master);
+    bedSrc.start();
+  }
+
+  update(dt, torchFlicker) {
+    if (!this.enabled || this.muted || !this.ctx) return;
+    if (this.torchBedGain) {
+      this.torchBedGain.gain.setTargetAtTime(0.024 + torchFlicker * 0.016, this.ctx.currentTime, 0.06);
+    }
+    this.crackleTimer -= dt;
+    if (this.crackleTimer <= 0) {
+      this.crackleTimer = rand(0.08, 0.34);
+      this._playTorchCrackle();
+    }
+  }
+
+  _playTorchCrackle() {
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'bandpass';
+    hp.frequency.value = rand(2100, 5800);
+    hp.Q.value = rand(2.5, 6.0);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(rand(0.014, 0.042), now);
+    g.gain.exponentialRampToValueAtTime(0.0005, now + rand(0.012, 0.03));
+    src.connect(hp); hp.connect(g); g.connect(this.master);
+    src.start(now, rand(0, 1.5), 0.04);
+  }
+
+  playFootstep(inPuddle = false) {
+    if (!this.enabled || this.muted || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    if (now - this.lastStepTime < 0.14) return;
+    this.lastStepTime = now;
+    const s = this.ctx.createBufferSource();
+    s.buffer = this.noiseBuf;
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = inPuddle ? rand(1100, 1750) : rand(380, 620);
+    f.Q.value = inPuddle ? 1.1 : 1.9;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(inPuddle ? 0.095 : 0.08, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + (inPuddle ? 0.09 : 0.055));
+    s.connect(f); f.connect(g); g.connect(this.master);
+    s.start(now, rand(0, 1.5), 0.1);
+
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(rand(92, 118), now);
+    osc.frequency.exponentialRampToValueAtTime(42, now + 0.045);
+    const og = this.ctx.createGain();
+    og.gain.setValueAtTime(0.055, now);
+    og.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    osc.connect(og); og.connect(this.master);
+    osc.start(now); osc.stop(now + 0.055);
+  }
+
+  playSwordSwing() {
+    if (!this.enabled || this.muted || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 2.4;
+    bp.frequency.setValueAtTime(rand(1250, 1650), now);
+    bp.frequency.exponentialRampToValueAtTime(280, now + 0.15);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.001, now);
+    g.gain.linearRampToValueAtTime(0.18, now + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
+    src.connect(bp); bp.connect(g); g.connect(this.master);
+    src.start(now, rand(0, 1.4), 0.19);
+  }
+
+  playHit(kind = 'skeleton', heavy = false) {
+    if (!this.enabled || this.muted || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    if (now - this.lastHitTime < 0.045) return;
+    this.lastHitTime = now;
+
+    const osc = this.ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(heavy ? 140 : 118, now);
+    osc.frequency.exponentialRampToValueAtTime(38, now + 0.11);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(heavy ? 0.34 : 0.24, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    osc.connect(g); g.connect(this.master);
+    osc.start(now); osc.stop(now + 0.13);
+
+    if (kind === 'skeleton' || kind === 'boss') {
+      for (let i = 0; i < 2; i++) {
+        const t = now + i * 0.025;
+        const c = this.ctx.createOscillator();
+        c.type = 'square';
+        c.frequency.setValueAtTime(rand(780, 1380), t);
+        c.frequency.exponentialRampToValueAtTime(rand(320, 520), t + 0.055);
+        const cg = this.ctx.createGain();
+        cg.gain.setValueAtTime(0.075, t);
+        cg.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+        const cf = this.ctx.createBiquadFilter();
+        cf.type = 'bandpass';
+        cf.frequency.value = 1100;
+        c.connect(cf); cf.connect(cg); cg.connect(this.master);
+        c.start(t); c.stop(t + 0.065);
+      }
+    } else if (kind === 'slime') {
+      const s = this.ctx.createOscillator();
+      s.type = 'sine';
+      s.frequency.setValueAtTime(240, now);
+      s.frequency.exponentialRampToValueAtTime(640, now + 0.055);
+      s.frequency.exponentialRampToValueAtTime(160, now + 0.13);
+      const sg = this.ctx.createGain();
+      sg.gain.setValueAtTime(0.16, now);
+      sg.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+      s.connect(sg); sg.connect(this.master);
+      s.start(now); s.stop(now + 0.15);
+    } else {
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.noiseBuf;
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = 950;
+      const ng = this.ctx.createGain();
+      ng.gain.setValueAtTime(0.18, now);
+      ng.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      src.connect(bp); bp.connect(ng); ng.connect(this.master);
+      src.start(now, rand(0, 1.5), 0.09);
+    }
+  }
+
+  playMonsterCry(kind = 'rat', death = false) {
+    if (!this.enabled || this.muted || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    if (kind === 'rat') {
+      const osc = this.ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(death ? rand(1750, 2150) : rand(1350, 1650), now);
+      osc.frequency.exponentialRampToValueAtTime(death ? 620 : 950, now + (death ? 0.21 : 0.12));
+      const f = this.ctx.createBiquadFilter();
+      f.type = 'bandpass'; f.frequency.value = 1500; f.Q.value = 3.2;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.12, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + (death ? 0.22 : 0.13));
+      osc.connect(f); f.connect(g); g.connect(this.master);
+      osc.start(now); osc.stop(now + 0.23);
+    } else if (kind === 'slime') {
+      const osc = this.ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(death ? 340 : 210, now);
+      osc.frequency.exponentialRampToValueAtTime(death ? 95 : 420, now + 0.18);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.14, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+      osc.connect(g); g.connect(this.master);
+      osc.start(now); osc.stop(now + 0.21);
+    } else if (kind === 'skeleton') {
+      const count = death ? 5 : 2;
+      for (let i = 0; i < count; i++) {
+        const t = now + i * rand(0.028, 0.055);
+        const s = this.ctx.createBufferSource();
+        s.buffer = this.noiseBuf;
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass'; bp.frequency.value = rand(1200, 2600); bp.Q.value = 7.0;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.11, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.045);
+        s.connect(bp); bp.connect(g); g.connect(this.master);
+        s.start(t, rand(0, 1.5), 0.05);
+      }
+    } else if (kind === 'boss') {
+      const osc = this.ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(death ? 140 : 105, now);
+      osc.frequency.exponentialRampToValueAtTime(death ? 42 : 68, now + (death ? 0.55 : 0.34));
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = 420;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.24, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + (death ? 0.58 : 0.36));
+      osc.connect(lp); lp.connect(g); g.connect(this.master);
+      osc.start(now); osc.stop(now + 0.6);
+    }
+  }
+
+  playHeroHurt() {
+    if (!this.enabled || this.muted || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(160, now);
+    osc.frequency.exponentialRampToValueAtTime(58, now + 0.16);
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 480;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.22, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
+    osc.connect(lp); lp.connect(g); g.connect(this.master);
+    osc.start(now); osc.stop(now + 0.18);
+  }
+
+  playCoin() {
+    if (!this.enabled || this.muted || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    [1760, 2349].forEach((freq, i) => {
+      const t = now + i * 0.055;
+      const osc = this.ctx.createOscillator();
+      osc.type = 'sine'; osc.frequency.setValueAtTime(freq, t);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.11, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      osc.connect(g); g.connect(this.master);
+      osc.start(t); osc.stop(t + 0.24);
+    });
+  }
+
+  playChest() {
+    if (!this.enabled || this.muted || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(135, now);
+    osc.frequency.linearRampToValueAtTime(210, now + 0.15);
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 340; bp.Q.value = 3;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.12, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
+    osc.connect(bp); bp.connect(g); g.connect(this.master);
+    osc.start(now); osc.stop(now + 0.18);
+
+    [1567, 1975, 2349, 2637].forEach((f, idx) => {
+      const t = now + 0.08 + idx * 0.05;
+      const c = this.ctx.createOscillator();
+      c.type = 'triangle'; c.frequency.setValueAtTime(f, t);
+      const cg = this.ctx.createGain();
+      cg.gain.setValueAtTime(0.09, t);
+      cg.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+      c.connect(cg); cg.connect(this.master);
+      c.start(t); c.stop(t + 0.25);
+    });
+  }
+
+  playPotion() {
+    if (!this.enabled || this.muted || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    [440, 554, 659, 880].forEach((f, i) => {
+      const t = now + i * 0.06;
+      const o = this.ctx.createOscillator();
+      o.type = 'sine'; o.frequency.setValueAtTime(f, t);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.11, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      o.connect(g); g.connect(this.master);
+      o.start(t); o.stop(t + 0.24);
+    });
+  }
+
+  playKey() {
+    if (!this.enabled || this.muted || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    [1318, 1760, 2093, 2637].forEach((f, i) => {
+      const t = now + i * 0.055;
+      const o = this.ctx.createOscillator();
+      o.type = 'sine'; o.frequency.setValueAtTime(f, t);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.12, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
+      o.connect(g); g.connect(this.master);
+      o.start(t); o.stop(t + 0.34);
+    });
+  }
+
+  playDoorUnlock() {
+    if (!this.enabled || this.muted || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    [0, 0.11].forEach((off, idx) => {
+      const t = now + off;
+      const o = this.ctx.createOscillator();
+      o.type = 'square';
+      o.frequency.setValueAtTime(idx === 0 ? 320 : 480, t);
+      o.frequency.exponentialRampToValueAtTime(95, t + 0.075);
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = 900;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.18, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.085);
+      o.connect(lp); lp.connect(g); g.connect(this.master);
+      o.start(t); o.stop(t + 0.09);
+    });
+    const cr = this.ctx.createOscillator();
+    cr.type = 'sawtooth';
+    cr.frequency.setValueAtTime(110, now + 0.18);
+    cr.frequency.linearRampToValueAtTime(175, now + 0.45);
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 310; bp.Q.value = 3.5;
+    const cg = this.ctx.createGain();
+    cg.gain.setValueAtTime(0.11, now + 0.18);
+    cg.gain.exponentialRampToValueAtTime(0.001, now + 0.48);
+    cr.connect(bp); bp.connect(cg); cg.connect(this.master);
+    cr.start(now + 0.18); cr.stop(now + 0.5);
+  }
+
+  playDoorOpen() {
+    if (!this.enabled || this.muted || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    const cr = this.ctx.createOscillator();
+    cr.type = 'sawtooth';
+    cr.frequency.setValueAtTime(120, now);
+    cr.frequency.linearRampToValueAtTime(165, now + 0.22);
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 280; bp.Q.value = 2.8;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.075, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+    cr.connect(bp); bp.connect(g); g.connect(this.master);
+    cr.start(now); cr.stop(now + 0.26);
+  }
+
+  playStairs() {
+    if (!this.enabled || this.muted || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    [220, 164.8, 130.8].forEach((f, i) => {
+      const t = now + i * 0.12;
+      const o = this.ctx.createOscillator();
+      o.type = 'triangle'; o.frequency.setValueAtTime(f, t);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.16, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+      o.connect(g); g.connect(this.master);
+      o.start(t); o.stop(t + 0.58);
+    });
+  }
+
+  playTrapSnap() {
+    if (!this.enabled || this.muted || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    const s = this.ctx.createBufferSource();
+    s.buffer = this.noiseBuf;
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = 1800;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.09, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+    s.connect(hp); hp.connect(g); g.connect(this.master);
+    s.start(now, rand(0, 1.5), 0.07);
+  }
+}
+
+// ============================================================================
+// 2. PROCEDURAL DUNGEON GENERATOR (Tile-Packed for GPU SDF Raymarching + BFS)
+// ============================================================================
+function generateDungeon(depth) {
+  const grid = Array.from({ length: GRID_H }, () => new Uint8Array(GRID_W));
+  const roomMap = Array.from({ length: GRID_H }, () => new Int16Array(GRID_W).fill(-1));
+  const isBossLevel = depth % 3 === 0;
+  const rooms = [];
+  const targetRooms = 7;
+
+  function canPlace(x, z, w, h) {
+    if (x < 2 || z < 2 || x + w > GRID_W - 2 || z + h > GRID_H - 2) return false;
+    for (const r of rooms) {
+      if (x < r.x + r.w + 3 && x + w + 3 > r.x && z < r.z + r.h + 3 && z + h + 3 > r.z) return false;
+    }
+    return true;
+  }
+
+  rooms.push({
+    id: 0, x: 4, z: 4, w: 6, h: 6,
+    cx: 7, cz: 7, theme: 'start', visited: true, neighbors: []
+  });
+
+  for (let attempt = 0; attempt < 360 && rooms.length < targetRooms; attempt++) {
+    const isLarge = rooms.length === targetRooms - 2 && isBossLevel;
+    const w = isLarge ? 7 : randInt(5, 7);
+    const h = isLarge ? 7 : randInt(5, 7);
+    const x = randInt(3, GRID_W - w - 3);
+    const z = randInt(3, GRID_H - h - 3);
+    if (canPlace(x, z, w, h)) {
+      rooms.push({
+        id: rooms.length, x, z, w, h,
+        cx: x + Math.floor(w / 2), cz: z + Math.floor(h / 2),
+        theme: 'crypt', visited: false, neighbors: []
+      });
+    }
+  }
+  if (rooms.length < 5) return generateDungeon(depth);
+
+  for (const r of rooms) {
+    for (let gz = r.z; gz < r.z + r.h; gz++) {
+      for (let gx = r.x; gx < r.x + r.w; gx++) {
+        grid[gz][gx] = CELL_FLOOR;
+        roomMap[gz][gx] = r.id;
+      }
+    }
+  }
+
+  // Prim's MST
+  const inTree = new Set([0]);
+  const edges = [];
+  while (inTree.size < rooms.length) {
+    let bestA = -1, bestB = -1, bestD = Infinity;
+    for (const a of inTree) {
+      for (let b = 0; b < rooms.length; b++) {
+        if (inTree.has(b)) continue;
+        const d = Math.hypot(rooms[a].cx - rooms[b].cx, rooms[a].cz - rooms[b].cz);
+        if (d < bestD) { bestD = d; bestA = a; bestB = b; }
+      }
+    }
+    inTree.add(bestB);
+    edges.push([bestA, bestB]);
+    rooms[bestA].neighbors.push(bestB);
+    rooms[bestB].neighbors.push(bestA);
+  }
+
+  // Exit room = farthest leaf node
+  const bfsDist = new Int16Array(rooms.length).fill(-1);
+  bfsDist[0] = 0;
+  const q = [0];
+  while (q.length) {
+    const u = q.shift();
+    for (const v of rooms[u].neighbors) {
+      if (bfsDist[v] === -1) { bfsDist[v] = bfsDist[u] + 1; q.push(v); }
+    }
+  }
+  let exitRoomId = -1, bestExitScore = -1;
+  for (let i = 1; i < rooms.length; i++) {
+    if (rooms[i].neighbors.length === 1) {
+      const score = bfsDist[i] * 100 + Math.hypot(rooms[i].cx - rooms[0].cx, rooms[i].cz - rooms[0].cz);
+      if (score > bestExitScore) { bestExitScore = score; exitRoomId = i; }
+    }
+  }
+  if (exitRoomId === -1) exitRoomId = rooms.length - 1;
+
+  // Key / Boss room
+  let keyRoomId = -1, bestKeyScore = -1;
+  for (let i = 1; i < rooms.length; i++) {
+    if (i === exitRoomId) continue;
+    const dStart = Math.hypot(rooms[i].cx - rooms[0].cx, rooms[i].cz - rooms[0].cz);
+    const dExit = Math.hypot(rooms[i].cx - rooms[exitRoomId].cx, rooms[i].cz - rooms[exitRoomId].cz);
+    const score = dStart + dExit * 0.4 + (isBossLevel ? rooms[i].w * rooms[i].h * 1.5 : 0);
+    if (score > bestKeyScore) { bestKeyScore = score; keyRoomId = i; }
+  }
+
+  const themePool = ['cells', 'shrine', 'pillared', 'armory', 'crypt'];
+  let tIdx = 0;
+  for (const r of rooms) {
+    if (r.id === 0) r.theme = 'start';
+    else if (r.id === exitRoomId) r.theme = 'exit';
+    else if (r.id === keyRoomId && isBossLevel) r.theme = 'boss';
+    else if (r.id === keyRoomId) r.theme = 'shrine';
+    else { r.theme = themePool[tIdx++ % themePool.length]; }
+  }
+
+  // Optional loop corridor between non-exit rooms
+  let extraAdded = 0;
+  for (let i = 0; i < rooms.length && extraAdded < 1; i++) {
+    if (i === exitRoomId) continue;
+    for (let j = i + 1; j < rooms.length && extraAdded < 1; j++) {
+      if (j === exitRoomId || rooms[i].neighbors.includes(j)) continue;
+      if (Math.hypot(rooms[i].cx - rooms[j].cx, rooms[i].cz - rooms[j].cz) < 15) {
+        edges.push([i, j]);
+        rooms[i].neighbors.push(j);
+        rooms[j].neighbors.push(i);
+        extraAdded++;
+      }
+    }
+  }
+
+  // Carve corridors (1-tile clean doorway at room thresholds, 2-tile open hallway between!)
+  const corridorTiles = [];
+  const corridorPaths = [];
+  function carveCorridorCell(gx, gz) {
+    if (gx < 1 || gz < 1 || gx >= GRID_W - 1 || gz >= GRID_H - 1) return;
+    if (grid[gz][gx] === CELL_VOID) {
+      grid[gz][gx] = CELL_FLOOR;
+      corridorTiles.push({ gx, gz });
+    }
+  }
+
+  for (const [ai, bi] of edges) {
+    const a = rooms[ai], b = rooms[bi];
+    const path = [];
+    let x = a.cx, z = a.cz;
+    const stepTo = (tx, tz) => {
+      while (x !== tx || z !== tz) {
+        if (x !== tx) x += Math.sign(tx - x);
+        else if (z !== tz) z += Math.sign(tz - z);
+        path.push({ gx: x, gz: z });
+      }
+    };
+    if (Math.random() < 0.5) { stepTo(b.cx, a.cz); stepTo(b.cx, b.cz); }
+    else { stepTo(a.cx, b.cz); stepTo(b.cx, b.cz); }
+    corridorPaths.push({ a: ai, b: bi, path });
+
+    for (let i = 0; i < path.length; i++) {
+      const p = path[i];
+      carveCorridorCell(p.gx, p.gz);
+      let adjRoom = false;
+      for (const r of rooms) {
+        if (p.gx >= r.x - 1 && p.gx <= r.x + r.w && p.gz >= r.z - 1 && p.gz <= r.z + r.h) { adjRoom = true; break; }
+      }
+      const nearExit = (
+        p.gx >= rooms[exitRoomId].x - 2 && p.gx <= rooms[exitRoomId].x + rooms[exitRoomId].w + 1 &&
+        p.gz >= rooms[exitRoomId].z - 2 && p.gz <= rooms[exitRoomId].z + rooms[exitRoomId].h + 1
+      );
+      if (!nearExit && !adjRoom && roomMap[p.gz][p.gx] === -1) {
+        const prev = path[Math.max(0, i - 1)];
+        const dx = p.gx - prev.gx, dz = p.gz - prev.gz;
+        if (dx !== 0 && p.gz + 1 < GRID_H - 2) {
+          let tr = false;
+          for (const r of rooms) if (p.gx >= r.x - 1 && p.gx <= r.x + r.w && p.gz + 1 >= r.z - 1 && p.gz + 1 <= r.z + r.h) tr = true;
+          if (!tr) carveCorridorCell(p.gx, p.gz + 1);
+        } else if (dz !== 0 && p.gx + 1 < GRID_W - 2) {
+          let tr = false;
+          for (const r of rooms) if (p.gx + 1 >= r.x - 1 && p.gx + 1 <= r.x + r.w && p.gz >= r.z - 1 && p.gz <= r.z + r.h) tr = true;
+          if (!tr) carveCorridorCell(p.gx + 1, p.gz);
+        }
+      }
+    }
+  }
+
+  // Surround floor cells with walls
+  for (let gz = 1; gz < GRID_H - 1; gz++) {
+    for (let gx = 1; gx < GRID_W - 1; gx++) {
+      if (grid[gz][gx] === CELL_VOID) {
+        let touches = false;
+        for (let dz = -1; dz <= 1 && !touches; dz++) {
+          for (let dx = -1; dx <= 1 && !touches; dx++) {
+            if (grid[gz + dz][gx + dx] === CELL_FLOOR) touches = true;
+          }
+        }
+        if (touches) grid[gz][gx] = CELL_WALL;
+      }
+    }
+  }
+
+  // Doors (Locked exit door + normal wooden room doors)
+  const doors = [];
+  const usedDoorKeys = new Set();
+  const er = rooms[exitRoomId];
+  const exitCandidates = [];
+  for (let gx = er.x; gx < er.x + er.w; gx++) {
+    if (grid[er.z - 1][gx] === CELL_FLOOR && roomMap[er.z - 1][gx] === -1) exitCandidates.push({ gx, gz: er.z - 1, horiz: true });
+    if (grid[er.z + er.h][gx] === CELL_FLOOR && roomMap[er.z + er.h][gx] === -1) exitCandidates.push({ gx, gz: er.z + er.h, horiz: true });
+  }
+  for (let gz = er.z; gz < er.z + er.h; gz++) {
+    if (grid[gz][er.x - 1] === CELL_FLOOR && roomMap[gz][er.x - 1] === -1) exitCandidates.push({ gx: er.x - 1, gz, horiz: false });
+    if (grid[gz][er.x + er.w] === CELL_FLOOR && roomMap[gz][er.x + er.w] === -1) exitCandidates.push({ gx: er.x + er.w, gz, horiz: false });
+  }
+  if (exitCandidates.length === 0) return generateDungeon(depth);
+  const chosenExit = exitCandidates[0];
+  for (let i = 1; i < exitCandidates.length; i++) grid[exitCandidates[i].gz][exitCandidates[i].gx] = CELL_WALL;
+  grid[chosenExit.gz][chosenExit.gx] = CELL_LOCKED_DOOR;
+  usedDoorKeys.add(`${chosenExit.gx},${chosenExit.gz}`);
+  doors.push({ gx: chosenExit.gx, gz: chosenExit.gz, horiz: chosenExit.horiz, locked: true, open: false, openAmount: 0 });
+
+  for (const r of rooms) {
+    if (r.id === exitRoomId) continue;
+    const checks = [];
+    for (let gx = r.x; gx < r.x + r.w; gx++) {
+      checks.push({ gx, gz: r.z - 1, horiz: true });
+      checks.push({ gx, gz: r.z + r.h, horiz: true });
+    }
+    for (let gz = r.z; gz < r.z + r.h; gz++) {
+      checks.push({ gx: r.x - 1, gz, horiz: false });
+      checks.push({ gx: r.x + r.w, gz, horiz: false });
+    }
+    for (const c of checks) {
+      const k = `${c.gx},${c.gz}`;
+      if (usedDoorKeys.has(k) || grid[c.gz][c.gx] !== CELL_FLOOR) continue;
+      if (c.horiz && grid[c.gz][c.gx - 1] === CELL_WALL && grid[c.gz][c.gx + 1] === CELL_WALL) {
+        grid[c.gz][c.gx] = CELL_DOOR;
+        usedDoorKeys.add(k);
+        doors.push({ gx: c.gx, gz: c.gz, horiz: true, locked: false, open: false, openAmount: 0 });
+      } else if (!c.horiz && grid[c.gz - 1][c.gx] === CELL_WALL && grid[c.gz + 1][c.gx] === CELL_WALL) {
+        grid[c.gz][c.gx] = CELL_DOOR;
+        usedDoorKeys.add(k);
+        doors.push({ gx: c.gx, gz: c.gz, horiz: false, locked: false, open: false, openAmount: 0 });
+      }
+    }
+  }
+
+  const stairsTile = { gx: er.cx, gz: er.cz };
+  grid[stairsTile.gz][stairsTile.gx] = CELL_STAIRS;
+
+  // Connectivity BFS verification
+  function bfsGrid(sx, sz, allowLocked) {
+    const vis = Array.from({ length: GRID_H }, () => new Uint8Array(GRID_W));
+    const qq = [[sx, sz]];
+    vis[sz][sx] = 1;
+    while (qq.length) {
+      const [cx, cz] = qq.shift();
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cx + dx, nz = cz + dz;
+        if (nx < 0 || nz < 0 || nx >= GRID_W || nz >= GRID_H || vis[nz][nx]) continue;
+        const c = grid[nz][nx];
+        if (c === CELL_FLOOR || c === CELL_DOOR || c === CELL_STAIRS || (allowLocked && c === CELL_LOCKED_DOOR)) {
+          vis[nz][nx] = 1; qq.push([nx, nz]);
+        }
+      }
+    }
+    return vis;
+  }
+  const visNoKey = bfsGrid(rooms[0].cx, rooms[0].cz, false);
+  const visWithKey = bfsGrid(rooms[0].cx, rooms[0].cz, true);
+  const kr = rooms[keyRoomId];
+  if (!visNoKey[kr.cz][kr.cx] || visNoKey[stairsTile.gz][stairsTile.gx] || !visWithKey[stairsTile.gz][stairsTile.gx]) {
+    return generateDungeon(depth);
+  }
+  for (const r of rooms) if (r.id !== exitRoomId && !visNoKey[r.cz][r.cx]) return generateDungeon(depth);
+
+  // Back wall check (no walkable floor to -X or -Z so camera is never blocked!)
+  function isBackWall(gx, gz) {
+    if (grid[gz][gx] !== CELL_WALL) return false;
+    for (let dz = -1; dz <= 0; dz++) {
+      for (let dx = -1; dx <= 0; dx++) {
+        if (dx === 0 && dz === 0) continue;
+        const nx = gx + dx, nz = gz + dz;
+        if (nx >= 0 && nz >= 0 && grid[nz][nx] >= CELL_FLOOR && grid[nz][nx] !== CELL_CELL_BARS) return false;
+      }
+    }
+    return true;
+  }
+
+  // GPU Map Buffer (36 x 36 x 4 RGBA8)
+  const mapData = new Uint8Array(GRID_W * GRID_H * 4);
+  const setCell = (gx, gz, r, g, b, a) => {
+    const i = (gz * GRID_W + gx) * 4;
+    if (r !== null) mapData[i] = r;
+    if (g !== null) mapData[i + 1] = g;
+    if (b !== null) mapData[i + 2] = b;
+    if (a !== null) mapData[i + 3] = a;
+  };
+  const getCell = (gx, gz) => {
+    const i = (gz * GRID_W + gx) * 4;
+    return [mapData[i], mapData[i + 1], mapData[i + 2], mapData[i + 3]];
+  };
+
+  // Initialize base GPU map from grid
+  for (let gz = 0; gz < GRID_H; gz++) {
+    for (let gx = 0; gx < GRID_W; gx++) {
+      const c = grid[gz][gx];
+      let gType = G_VOID;
+      if (c === CELL_WALL) gType = isBackWall(gx, gz) ? G_BACK_WALL : G_CUT_WALL;
+      else if (c === CELL_FLOOR) gType = G_FLOOR;
+      else if (c === CELL_STAIRS) gType = G_STAIRS;
+      const seedBits = (randInt(0, 63) << 2);
+      const mossBit = (c === CELL_FLOOR && Math.random() < 0.24) ? 2 : 0;
+      setCell(gx, gz, gType, P_NONE, 0, seedBits | mossBit);
+    }
+  }
+  for (const dr of doors) {
+    const code = dr.locked ? (dr.horiz ? G_LOCK_H : G_LOCK_V) : (dr.horiz ? G_DOOR_H : G_DOOR_V);
+    setCell(dr.gx, dr.gz, code, P_NONE, 0, null);
+  }
+
+  // Track logical props, lights, puddles, chests, traps, monsters
+  const solidColliders = [];
+  const puddles = [];
+  const traps = [];
+  const chests = [];
+  const warmSources = [];
+  const coldSources = [];
+  const monsterSpawns = [];
+  const flameAnchors = [];
+  const cellBarsCount = { n: 0 };
+
+  // Cool mist light rising from descending stairs
+  coldSources.push({ x: stairsTile.gx * TILE, y: 0.7, z: stairsTile.gz * TILE, color: [0.30, 0.66, 0.94], intensity: 2.1, phase: 0 });
+
+  const reserved = new Set();
+  const markRes = (gx, gz) => reserved.add(`${gx},${gz}`);
+  const isRes = (gx, gz) => reserved.has(`${gx},${gz}`);
+  const worldOf = (gx, gz) => ({ x: gx * TILE, z: gz * TILE });
+
+  markRes(rooms[0].cx, rooms[0].cz);
+  markRes(stairsTile.gx, stairsTile.gz);
+  markRes(kr.cx, kr.cz);
+  for (const dr of doors) {
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) markRes(dr.gx + dx, dr.gz + dz);
+  }
+
+  const addWallDeco = (gx, gz, bit) => {
+    const i = (gz * GRID_W + gx) * 4;
+    if (mapData[i] === G_BACK_WALL) mapData[i + 2] |= bit;
+  };
+  const addPuddle = (gx, gz) => {
+    const i = (gz * GRID_W + gx) * 4;
+    if (mapData[i] === G_FLOOR && mapData[i + 1] === P_NONE) {
+      mapData[i + 3] |= 1;
+      puddles.push({ gx, gz, x: gx * TILE, z: gz * TILE });
+    }
+  };
+  const placeProp = (gx, gz, propCode, param, solidRadius) => {
+    const i = (gz * GRID_W + gx) * 4;
+    if (mapData[i] !== G_FLOOR || mapData[i + 1] !== P_NONE) return false;
+    mapData[i + 1] = propCode;
+    mapData[i + 2] = param;
+    if (solidRadius > 0) {
+      markRes(gx, gz);
+      solidColliders.push({ gx, gz, x: gx * TILE, z: gz * TILE, r: solidRadius, propCode });
+    }
+    return true;
+  };
+
+  // Decorate rooms
+  for (const r of rooms) {
+    // Back wall torches, banners, and cobwebs encoded directly into back-wall tile B channel!
+    for (let gx = r.x; gx < r.x + r.w; gx++) {
+      if (isBackWall(gx, r.z - 1)) {
+        if ((gx - r.x) === 1 || (gx - r.x) === r.w - 2) {
+          addWallDeco(gx, r.z - 1, 1); // Torch on +Z face
+          const tx = gx * TILE, tz = (r.z - 0.32) * TILE;
+          warmSources.push({ x: tx, y: 2.05, z: tz, color: [1.0, 0.45, 0.13], intensity: 2.4, phase: rand(0, 6.28) });
+          flameAnchors.push({ x: tx, y: 2.05, z: (r.z - 0.40) * TILE });
+        } else if ((gx - r.x) === Math.floor(r.w / 2) && (r.theme === 'pillared' || r.theme === 'boss' || r.theme === 'start' || r.theme === 'exit')) {
+          addWallDeco(gx, r.z - 1, 4); // Tattered crimson banner on +Z face
+        }
+      }
+    }
+    for (let gz = r.z; gz < r.z + r.h; gz++) {
+      if (isBackWall(r.x - 1, gz)) {
+        if ((gz - r.z) === Math.floor(r.h / 2)) {
+          addWallDeco(r.x - 1, gz, 2); // Torch on +X face
+          const tx = (r.x - 0.32) * TILE, tz = gz * TILE;
+          warmSources.push({ x: tx, y: 2.05, z: tz, color: [1.0, 0.45, 0.13], intensity: 2.4, phase: rand(0, 6.28) });
+          flameAnchors.push({ x: (r.x - 0.40) * TILE, y: 2.05, z: tz });
+        } else if ((gz - r.z) === 1 && Math.random() < 0.6) {
+          addWallDeco(r.x - 1, gz, 8); // Banner on +X face
+        }
+      }
+    }
+    if (isBackWall(r.x - 1, r.z) && isBackWall(r.x, r.z - 1)) {
+      addWallDeco(r.x, r.z - 1, 16); // Cobweb tucked into NW corner
+    }
+
+    // Pillars & Braziers
+    if (r.theme === 'pillared' || r.theme === 'boss') {
+      const pc = [[r.x + 1, r.z + 1], [r.x + r.w - 2, r.z + 1], [r.x + 1, r.z + r.h - 2], [r.x + r.w - 2, r.z + r.h - 2]];
+      for (const [pgx, pgz] of pc) {
+        if (!isRes(pgx, pgz) && r.w >= 6 && r.h >= 6) placeProp(pgx, pgz, P_PILLAR, 0, 0.44);
+      }
+      if (r.theme === 'boss') {
+        for (const bx of [r.x + 1, r.x + r.w - 2]) {
+          if (!isRes(bx, r.cz) && placeProp(bx, r.cz, P_BRAZIER, randInt(0, 255), 0.42)) {
+            warmSources.push({ x: bx * TILE, y: 1.5, z: r.cz * TILE, color: [1.0, 0.44, 0.12], intensity: 2.9, phase: rand(0, 6.28) });
+            flameAnchors.push({ x: bx * TILE, y: 1.25, z: r.cz * TILE });
+          }
+        }
+        placeProp(r.cx, r.cz, P_RUNE, randInt(0, 255), 0);
+        coldSources.push({ x: r.cx * TILE, y: 0.85, z: r.cz * TILE, color: [0.22, 0.72, 1.0], intensity: 2.4, phase: rand(0, 6.28) });
+      } else if (!isRes(r.cx, r.z + 1) && placeProp(r.cx, r.z + 1, P_BRAZIER, randInt(0, 255), 0.42)) {
+        warmSources.push({ x: r.cx * TILE, y: 1.5, z: (r.z + 1) * TILE, color: [1.0, 0.44, 0.12], intensity: 2.8, phase: rand(0, 6.28) });
+        flameAnchors.push({ x: r.cx * TILE, y: 1.25, z: (r.z + 1) * TILE });
+      }
+    }
+
+    // Iron-Barred Jail Cells + Overhead Moonlight Grate (scan clean 3-tile or 2-tile North/West span)
+    if (r.theme === 'cells' || (cellBarsCount.n === 0 && (r.theme === 'crypt' || r.theme === 'armory'))) {
+      let placed = false;
+      for (const span of [3, 2]) {
+        if (!placed && r.h >= 5 && r.w >= 5) {
+          for (let startX = r.x; startX <= r.x + r.w - span && !placed; startX++) {
+            const endX = startX + span - 1;
+            let clear = true;
+            for (let gx = startX; gx <= endX; gx++) {
+              if (grid[r.z - 1][gx] !== CELL_WALL || isRes(gx, r.z) || isRes(gx, r.z + 1)) clear = false;
+            }
+            if (clear) {
+              for (let gx = startX; gx <= endX; gx++) {
+                grid[r.z][gx] = CELL_CELL_BARS;
+                markRes(gx, r.z);
+                const barFlags = 1 | (gx === endX && endX < r.x + r.w - 1 ? 2 : 0);
+                setCell(gx, r.z, G_CELL, P_BONES, barFlags, null);
+                cellBarsCount.n++;
+              }
+              placed = true;
+            }
+          }
+        }
+        if (!placed && r.h >= 5 && r.w >= 5) {
+          for (let startZ = r.z; startZ <= r.z + r.h - span && !placed; startZ++) {
+            const endZ = startZ + span - 1;
+            let clear = true;
+            for (let gz = startZ; gz <= endZ; gz++) {
+              if (grid[gz][r.x - 1] !== CELL_WALL || isRes(r.x, gz) || isRes(r.x + 1, gz)) clear = false;
+            }
+            if (clear) {
+              for (let gz = startZ; gz <= endZ; gz++) {
+                grid[gz][r.x] = CELL_CELL_BARS;
+                markRes(r.x, gz);
+                const barFlags = 2 | (gz === endZ && endZ < r.z + r.h - 1 ? 1 : 0);
+                setCell(r.x, gz, G_CELL, P_BONES, barFlags, null);
+                cellBarsCount.n++;
+              }
+              placed = true;
+            }
+          }
+        }
+      }
+      if (r.theme === 'cells') {
+        placeProp(r.cx, r.cz, P_MOON, 0, 0);
+        coldSources.push({ x: r.cx * TILE, y: 2.0, z: r.cz * TILE, color: [0.44, 0.72, 1.0], intensity: 2.4, phase: rand(0, 6.28) });
+      }
+    }
+
+    if (r.theme === 'shrine') {
+      placeProp(r.cx, r.cz, P_RUNE, randInt(0, 255), 0);
+      coldSources.push({ x: r.cx * TILE, y: 0.85, z: r.cz * TILE, color: [0.22, 0.72, 1.0], intensity: 2.5, phase: rand(0, 6.28) });
+    }
+
+    if (r.theme === 'start') {
+      // Moonlight grate + welcoming brazier in Start Room
+      if (placeProp(r.cx - 1, r.cz - 1, P_MOON, 0, 0)) {
+        coldSources.push({ x: (r.cx - 1) * TILE, y: 2.0, z: (r.cz - 1) * TILE, color: [0.44, 0.72, 1.0], intensity: 2.3, phase: 0 });
+      }
+      if (!isRes(r.x + r.w - 1, r.z) && placeProp(r.x + r.w - 1, r.z, P_BRAZIER, randInt(0, 255), 0.42)) {
+        warmSources.push({ x: (r.x + r.w - 1) * TILE, y: 1.5, z: r.z * TILE, color: [1.0, 0.44, 0.12], intensity: 2.8, phase: 1.1 });
+        flameAnchors.push({ x: (r.x + r.w - 1) * TILE, y: 1.25, z: r.z * TILE });
+      }
+    }
+
+    if (r.theme === 'exit') {
+      for (const dx of [-1, 1]) {
+        const bx = r.cx + dx, bz = r.cz - 1;
+        if (bx >= r.x && bx < r.x + r.w && bz >= r.z && !isRes(bx, bz) && placeProp(bx, bz, P_BRAZIER, randInt(0, 255), 0.42)) {
+          warmSources.push({ x: bx * TILE, y: 1.5, z: bz * TILE, color: [1.0, 0.44, 0.12], intensity: 2.7, phase: rand(0, 6.28) });
+          flameAnchors.push({ x: bx * TILE, y: 1.25, z: bz * TILE });
+        }
+      }
+    }
+
+    // Treasure Chests
+    if (r.theme !== 'start' && r.theme !== 'exit' && (r.theme === 'armory' || r.theme === 'shrine' || r.theme === 'boss' || Math.random() < 0.75)) {
+      const cands = [[r.x + r.w - 1, r.z], [r.x, r.z + r.h - 1], [r.x + r.w - 1, r.z + r.h - 1], [r.cx, r.z]];
+      for (const [cgx, cgz] of cands) {
+        if (grid[cgz][cgx] === CELL_FLOOR && !isRes(cgx, cgz) && placeProp(cgx, cgz, P_CHEST, 0, 0.44)) {
+          chests.push({ gx: cgx, gz: cgz, x: cgx * TILE, z: cgz * TILE, opened: false, openAnim: 0, roomId: r.id });
+          break;
+        }
+      }
+    }
+
+    // Reflective puddles on flagstones
+    if (r.theme !== 'exit') {
+      const pc = r.theme === 'start' ? 2 : randInt(1, 2);
+      for (let i = 0; i < pc; i++) {
+        const px = r.x + randInt(1, Math.max(1, r.w - 2));
+        const pz = r.z + randInt(1, Math.max(1, r.h - 2));
+        addPuddle(px, pz);
+      }
+    }
+
+    // Perimeter clutter: barrels, crates, rubble, bones
+    const clutter = r.theme === 'armory' ? 5 : randInt(2, 4);
+    for (let i = 0; i < clutter; i++) {
+      const side = randInt(0, 3);
+      let gx = r.x + randInt(0, r.w - 1), gz = r.z + randInt(0, r.h - 1);
+      if (side === 0) gz = r.z;
+      else if (side === 1) gz = r.z + r.h - 1;
+      else if (side === 2) gx = r.x;
+      else gx = r.x + r.w - 1;
+      if (grid[gz][gx] !== CELL_FLOOR || isRes(gx, gz)) continue;
+      let adjDoor = false;
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+        const c = grid[gz + dz]?.[gx + dx];
+        if (c === CELL_DOOR || c === CELL_LOCKED_DOOR) adjDoor = true;
+      }
+      if (adjDoor) continue;
+      const roll = Math.random();
+      if (roll < 0.34) placeProp(gx, gz, P_BARREL, 0, 0.38);
+      else if (roll < 0.64) placeProp(gx, gz, P_CRATE, 0, 0.44);
+      else if (roll < 0.84) placeProp(gx, gz, P_RUBBLE, randInt(0, 255), 0);
+      else placeProp(gx, gz, P_BONES, randInt(0, 255), 0);
+    }
+
+    // Monsters in every room
+    if (r.theme === 'start') {
+      const s1 = worldOf(r.x + r.w - 2, r.z + r.h - 2);
+      monsterSpawns.push({ type: 'rat', x: s1.x, z: s1.z, roomId: r.id });
+      const s2 = worldOf(r.x + r.w - 1, r.cz);
+      if (grid[r.cz][r.x + r.w - 1] === CELL_FLOOR) monsterSpawns.push({ type: 'skeleton', x: s2.x, z: s2.z, roomId: r.id });
+    } else if (r.theme === 'boss') {
+      const c = worldOf(r.cx, r.cz);
+      monsterSpawns.push({ type: 'boss', x: c.x, z: c.z, roomId: r.id });
+      monsterSpawns.push({ type: 'skeleton', x: c.x - 2.4, z: c.z + 1.8, roomId: r.id });
+      monsterSpawns.push({ type: 'rat', x: c.x + 2.4, z: c.z - 1.6, roomId: r.id });
+    } else if (r.theme === 'exit') {
+      const c = worldOf(r.cx, r.cz);
+      monsterSpawns.push({ type: 'skeleton', x: c.x - 1.8, z: c.z + 1.4, roomId: r.id });
+      monsterSpawns.push({ type: 'slime', x: c.x + 1.8, z: c.z - 1.2, roomId: r.id });
+    } else {
+      const cnt = randInt(2, 4);
+      const types = ['skeleton', 'rat', 'slime'];
+      for (let m = 0; m < cnt; m++) {
+        for (let tr = 0; tr < 10; tr++) {
+          const mgx = r.x + randInt(1, Math.max(1, r.w - 2));
+          const mgz = r.z + randInt(1, Math.max(1, r.h - 2));
+          if (grid[mgz][mgx] === CELL_FLOOR && !isRes(mgx, mgz)) {
+            const wp = worldOf(mgx, mgz);
+            const t = m === 0 ? types[(r.id + depth) % 3] : types[randInt(0, 2)];
+            monsterSpawns.push({ type: t, x: wp.x + rand(-0.35, 0.35), z: wp.z + rand(-0.35, 0.35), roomId: r.id });
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // Corridor sconces, traps, puddles & active patrols
+  let spikeCount = 0, bladeCount = 0;
+  for (const cp of corridorPaths) {
+    const pure = cp.path.filter(p => roomMap[p.gz][p.gx] === -1 && grid[p.gz][p.gx] === CELL_FLOOR && !isRes(p.gx, p.gz));
+    if (pure.length === 0) continue;
+
+    const mid = pure[Math.floor(pure.length / 2)];
+    if (isBackWall(mid.gx, mid.gz - 1)) {
+      addWallDeco(mid.gx, mid.gz - 1, 1);
+      warmSources.push({ x: mid.gx * TILE, y: 2.05, z: (mid.gz - 0.32) * TILE, color: [1.0, 0.45, 0.13], intensity: 2.3, phase: rand(0, 6.28) });
+      flameAnchors.push({ x: mid.gx * TILE, y: 2.05, z: (mid.gz - 0.40) * TILE });
+    } else if (isBackWall(mid.gx - 1, mid.gz)) {
+      addWallDeco(mid.gx - 1, mid.gz, 2);
+      warmSources.push({ x: (mid.gx - 0.32) * TILE, y: 2.05, z: mid.gz * TILE, color: [1.0, 0.45, 0.13], intensity: 2.3, phase: rand(0, 6.28) });
+      flameAnchors.push({ x: (mid.gx - 0.40) * TILE, y: 2.05, z: mid.gz * TILE });
+    }
+
+    if (pure.length >= 2) {
+      const mt = pure[Math.floor(pure.length * 0.45)];
+      const wp = worldOf(mt.gx, mt.gz);
+      const types = ['rat', 'skeleton', 'slime'];
+      monsterSpawns.push({ type: types[randInt(0, 2)], x: wp.x, z: wp.z, roomId: -1 });
+      if (pure.length >= 6) {
+        const mt2 = pure[Math.floor(pure.length * 0.78)];
+        const wp2 = worldOf(mt2.gx, mt2.gz);
+        monsterSpawns.push({ type: types[randInt(0, 2)], x: wp2.x, z: wp2.z, roomId: -1 });
+      }
+    }
+
+    if (pure.length >= 3) {
+      const tt = pure[Math.floor(pure.length * 0.6)];
+      const phByte = randInt(0, 255);
+      const ph = (phByte / 255) * 6.28318;
+      const horizWalls = grid[tt.gz - 1][tt.gx] === CELL_WALL || grid[tt.gz + 1][tt.gx] === CELL_WALL;
+      if (bladeCount < 2 && pure.length >= 4 && placeProp(tt.gx, tt.gz, horizWalls ? P_BLADE_Z : P_BLADE_X, phByte, 0)) {
+        bladeCount++;
+        traps.push({ type: 'blade', gx: tt.gx, gz: tt.gz, x: tt.gx * TILE, z: tt.gz * TILE, axis: horizWalls ? 'z' : 'x', phase: ph, active: false, hitCooldown: 0 });
+      } else if (spikeCount < 3 && placeProp(tt.gx, tt.gz, P_SPIKES, phByte, 0)) {
+        spikeCount++;
+        traps.push({ type: 'spikes', gx: tt.gx, gz: tt.gz, x: tt.gx * TILE, z: tt.gz * TILE, phase: ph, active: false, hitCooldown: 0 });
+      }
+    }
+    if (Math.random() < 0.48 && pure.length >= 2) {
+      const pt = pure[randInt(0, pure.length - 1)];
+      addPuddle(pt.gx, pt.gz);
+    }
+  }
+
+  if (spikeCount === 0 && rooms.length > 2) {
+    const r = rooms[1];
+    if (placeProp(r.cx, r.cz, P_SPIKES, 0, 0)) {
+      traps.push({ type: 'spikes', gx: r.cx, gz: r.cz, x: r.cx * TILE, z: r.cz * TILE, phase: 0, active: false, hitCooldown: 0 });
+    }
+  }
+
+  // Golden Dungeon Key
+  const keyPos = worldOf(kr.cx, kr.cz);
+  const keyItem = { x: keyPos.x, z: keyPos.z, collected: false, roomId: keyRoomId, guardedByBoss: isBossLevel };
+  warmSources.push({ x: keyPos.x, y: 0.9, z: keyPos.z, color: [1.0, 0.78, 0.25], intensity: 1.6, phase: 0, isKey: true });
+
+  // Build sub-tile Nav Grid & guarantee reachability
+  const navGrid = new Uint8Array(NAV_W * NAV_H);
+  const rebuildNav = () => {
+    navGrid.fill(1);
+    for (let nz = 0; nz < NAV_H; nz++) {
+      for (let nx = 0; nx < NAV_W; nx++) {
+        const wx = ((nx + 0.5) / NAV_SCALE - 0.5) * TILE;
+        const wz = ((nz + 0.5) / NAV_SCALE - 0.5) * TILE;
+        const gx = Math.round(wx / TILE), gz = Math.round(wz / TILE);
+        if (gx < 0 || gz < 0 || gx >= GRID_W || gz >= GRID_H) continue;
+        const c = grid[gz][gx];
+        if (c === CELL_FLOOR || c === CELL_DOOR || c === CELL_STAIRS) navGrid[nz * NAV_W + nx] = 0;
+        else if (c === CELL_LOCKED_DOOR) navGrid[nz * NAV_W + nx] = 2;
+      }
+    }
+    for (const c of solidColliders) {
+      const pad = c.r + 0.34;
+      const minNx = clamp(Math.floor((c.x - pad) / (TILE / NAV_SCALE) + 0.5), 0, NAV_W - 1);
+      const maxNx = clamp(Math.floor((c.x + pad) / (TILE / NAV_SCALE) + 0.5), 0, NAV_W - 1);
+      const minNz = clamp(Math.floor((c.z - pad) / (TILE / NAV_SCALE) + 0.5), 0, NAV_H - 1);
+      const maxNz = clamp(Math.floor((c.z + pad) / (TILE / NAV_SCALE) + 0.5), 0, NAV_H - 1);
+      for (let nz = minNz; nz <= maxNz; nz++) {
+        for (let nx = minNx; nx <= maxNx; nx++) if (navGrid[nz * NAV_W + nx] === 0) navGrid[nz * NAV_W + nx] = 1;
+      }
+    }
+  };
+  rebuildNav();
+
+  const heroStart = worldOf(rooms[0].cx, rooms[0].cz);
+  const worldToNav = (wx, wz) => ({
+    nx: clamp(Math.floor(wx / (TILE / NAV_SCALE) + 0.5), 0, NAV_W - 1),
+    nz: clamp(Math.floor(wz / (TILE / NAV_SCALE) + 0.5), 0, NAV_H - 1)
+  });
+
+  // Verify sub-tile reachability
+  const sn = worldToNav(heroStart.x, heroStart.z);
+  const vis = new Uint8Array(NAV_W * NAV_H);
+  const qn = [sn.nz * NAV_W + sn.nx];
+  vis[qn[0]] = 1;
+  for (let head = 0; head < qn.length; head++) {
+    const idx = qn[head], cx = idx % NAV_W, cz = (idx - cx) / NAV_W;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = cx + dx, nz = cz + dz;
+      if (nx < 0 || nz < 0 || nx >= NAV_W || nz >= NAV_H) continue;
+      const ni = nz * NAV_W + nx;
+      if (!vis[ni] && navGrid[ni] !== 1) { vis[ni] = 1; qn.push(ni); }
+    }
+  }
+  let allReachable = true;
+  for (const r of rooms) {
+    const rn = worldToNav(r.cx * TILE, r.cz * TILE);
+    if (!vis[rn.nz * NAV_W + rn.nx]) allReachable = false;
+  }
+  if (!allReachable) {
+    for (let i = solidColliders.length - 1; i >= 0; i--) {
+      if (solidColliders[i].propCode === P_BARREL || solidColliders[i].propCode === P_CRATE) {
+        const sc = solidColliders[i];
+        setCell(sc.gx, sc.gz, null, P_NONE, 0, null);
+        solidColliders.splice(i, 1);
+      }
+    }
+    rebuildNav();
+  }
+
+  return {
+    depth, isBossLevel, grid, roomMap, rooms, exitRoomId, keyRoomId, stairsTile,
+    doors, solidColliders, puddles, traps, chests, warmSources, coldSources,
+    flameAnchors, monsterSpawns, keyItem, heroStart, navGrid, mapData, worldToNav,
+    cellBarsCount: cellBarsCount.n
+  };
+}
+
+// ============================================================================
+// 3. SUB-TILE A* PATHFINDING
+// ============================================================================
+function findPath(dungeon, sx, sz, tx, tz, hasKey) {
+  const s = dungeon.worldToNav(sx, sz);
+  const e = dungeon.worldToNav(tx, tz);
+  const nav = dungeon.navGrid;
+  const isPassable = (nx, nz) => {
+    if (nx < 0 || nz < 0 || nx >= NAV_W || nz >= NAV_H) return false;
+    const v = nav[nz * NAV_W + nx];
+    return v === 0 || (hasKey && v === 2);
+  };
+  let snx = s.nx, snz = s.nz;
+  if (!isPassable(snx, snz)) {
+    outerS: for (let r = 1; r <= 3; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
+      if (isPassable(snx + dx, snz + dz)) { snx += dx; snz += dz; break outerS; }
+    }
+  }
+  let enx = e.nx, enz = e.nz;
+  if (!isPassable(enx, enz)) {
+    outerE: for (let r = 1; r <= 4; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
+      if (isPassable(enx + dx, enz + dz)) { enx += dx; enz += dz; break outerE; }
+    }
+  }
+  const startIdx = snz * NAV_W + snx, endIdx = enz * NAV_W + enx;
+  if (startIdx === endIdx) return [{ x: tx, z: tz }];
+
+  const total = NAV_W * NAV_H;
+  const gScore = new Float32Array(total).fill(1e9);
+  const cameFrom = new Int32Array(total).fill(-1);
+  const closed = new Uint8Array(total);
+  gScore[startIdx] = 0;
+
+  const hIdx = [startIdx], hF = [Math.hypot(enx - snx, enz - snz)];
+  const push = (idx, f) => {
+    let i = hIdx.length;
+    hIdx.push(idx); hF.push(f);
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (hF[p] <= f) break;
+      hIdx[i] = hIdx[p]; hF[i] = hF[p]; i = p;
+    }
+    hIdx[i] = idx; hF[i] = f;
+  };
+  const pop = () => {
+    const top = hIdx[0], li = hIdx.pop(), lf = hF.pop();
+    if (hIdx.length > 0) {
+      let i = 0, n = hIdx.length;
+      while (true) {
+        let l = (i << 1) + 1, r = l + 1, sm = i;
+        if (l < n && hF[l] < lf) sm = l;
+        if (r < n && hF[r] < (sm === i ? lf : hF[sm])) sm = r;
+        if (sm === i) break;
+        hIdx[i] = hIdx[sm]; hF[i] = hF[sm]; i = sm;
+      }
+      hIdx[i] = li; hF[i] = lf;
+    }
+    return top;
+  };
+
+  const dirs = [[1,0,1],[-1,0,1],[0,1,1],[0,-1,1],[1,1,1.414],[-1,1,1.414],[1,-1,1.414],[-1,-1,1.414]];
+  let found = false, steps = 0;
+  while (hIdx.length > 0 && steps < 4200) {
+    steps++;
+    const cur = pop();
+    if (cur === endIdx) { found = true; break; }
+    if (closed[cur]) continue;
+    closed[cur] = 1;
+    const cx = cur % NAV_W, cz = (cur - cx) / NAV_W, cg = gScore[cur];
+    for (let d = 0; d < 8; d++) {
+      const dx = dirs[d][0], dz = dirs[d][1], nx = cx + dx, nz = cz + dz;
+      if (!isPassable(nx, nz)) continue;
+      if (dx !== 0 && dz !== 0 && (!isPassable(cx + dx, cz) || !isPassable(cx, cz + dz))) continue;
+      const ni = nz * NAV_W + nx;
+      if (closed[ni]) continue;
+      const ng = cg + dirs[d][2];
+      if (ng < gScore[ni]) {
+        gScore[ni] = ng; cameFrom[ni] = cur;
+        push(ni, ng + Math.hypot(enx - nx, enz - nz));
+      }
+    }
+  }
+  if (!found) return [];
+  const rev = [];
+  for (let c = endIdx; c !== -1 && c !== startIdx; c = cameFrom[c]) {
+    const cx = c % NAV_W, cz = (c - cx) / NAV_W;
+    rev.push({ x: ((cx + 0.5) / NAV_SCALE - 0.5) * TILE, z: ((cz + 0.5) / NAV_SCALE - 0.5) * TILE });
+  }
+  rev.reverse();
+  return rev;
+}
+
+// ============================================================================
+// 4. PURE WEBGL2 GLSL SHADERS (100% ALL-SHADERS RENDERING PIPELINE!)
+// ============================================================================
+const FULLSCREEN_VS = `#version 300 es
+precision highp float;
+out vec2 vUv;
+void main() {
+  // Single fullscreen triangle covering [-1, 1]
+  vec2 pos = vec2((gl_VertexID == 1) ? 3.0 : -1.0, (gl_VertexID == 2) ? 3.0 : -1.0);
+  vUv = pos * 0.5 + 0.5;
+  gl_Position = vec4(pos, 0.0, 1.0);
+}
+`;
+
+// PASS 1: Complete 3D Dungeon SDF Raymarcher + Soft Shadows + True Reflections + Volumetric Moonlight
+const RAYMARCH_FS = `#version 300 es
+precision highp float;
+precision highp int;
+
+in vec2 vUv;
+out vec4 fragColor;
+
+uniform sampler2D uMapTex;
+uniform vec2 uLowRes;
+uniform float uAspect;
+uniform float uCamZoom;
+uniform float uTime;
+uniform float uDepthTint;
+
+uniform vec3 uCamTarget;
+uniform vec3 uHeroPos;       // x, yBob, z
+uniform vec4 uHeroState;     // angle, walkPhase, moveAmt, flinchOrHeal
+uniform vec4 uHeroSwing;     // swingP (0..1, <0 idle), swingDir, slashAlpha, unused
+uniform vec3 uHeroLightPos;
+uniform vec3 uHeroLightCol;
+
+uniform vec4 uWarmPos[${MAX_WARM_LIGHTS}]; // xyz, intensity
+uniform vec4 uWarmCol[${MAX_WARM_LIGHTS}]; // rgb, phase
+uniform vec4 uColdPos[${MAX_COLD_LIGHTS}]; // xyz, intensity
+uniform vec4 uColdCol[${MAX_COLD_LIGHTS}]; // rgb, phase
+
+uniform int uMobCount;
+uniform vec4 uMob0[${MAX_MOBS}]; // x, z, angle, type (0=skele,1=rat,2=slime,3=boss)
+uniform vec4 uMob1[${MAX_MOBS}]; // walkPhase, atkAnim, flash, hpFrac
+uniform vec4 uMob2[${MAX_MOBS}]; // windup, alerted, radius, unused
+
+uniform int uItemCount;
+uniform vec4 uItems[${MAX_ITEMS}]; // x, y, z, kind (0=key, 1=gold, 2=potion)
+
+uniform int uGibCount;
+uniform vec4 uGibs[${MAX_GIBS}];   // x, y, z, kindAndScale (0=bone, 1=goo, 2=rat/armor)
+
+uniform int uEmberCount;
+uniform vec4 uEmbers[${MAX_EMBERS}];   // x, y, z, lifeFrac
+uniform vec4 uEmberCols[${MAX_EMBERS}]; // rgb, unused
+
+// Material IDs
+const int MAT_VOID      = 0;
+const int MAT_FLOOR     = 1;
+const int MAT_WALL      = 2;
+const int MAT_CAP       = 3;
+const int MAT_TRIM      = 4;
+const int MAT_WOOD      = 5;
+const int MAT_IRON      = 6;
+const int MAT_STEEL     = 7;
+const int MAT_GOLD      = 8;
+const int MAT_BONE      = 9;
+const int MAT_CLOAK     = 10;
+const int MAT_ARMOR     = 11;
+const int MAT_SKIN      = 12;
+const int MAT_FLAME     = 13;
+const int MAT_BANNER    = 14;
+const int MAT_RAT       = 15;
+const int MAT_SLIME     = 16;
+const int MAT_EYE_RED   = 17;
+const int MAT_EYE_AMB   = 18;
+const int MAT_EYE_GRN   = 19;
+const int MAT_POTION    = 20;
+const int MAT_BOSS_CAPE = 21;
+const int MAT_STAIR_PIT = 22;
+
+// Math & procedural noise helpers
+float hash12(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+float hash13(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+float noise2(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x),
+    mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x),
+    f.y
+  );
+}
+mat2 rot2(float a) {
+  float c = cos(a), s = sin(a);
+  return mat2(c, -s, s, c);
+}
+
+// SDF Primitives
+float sdBox(vec3 p, vec3 b) {
+  vec3 q = abs(p) - b;
+  return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+}
+float sdRoundBox(vec3 p, vec3 b, float r) {
+  vec3 q = abs(p) - b + r;
+  return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
+}
+float sdCyl(vec3 p, float r, float h) {
+  vec2 d = abs(vec2(length(p.xz), p.y)) - vec2(r, h);
+  return min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
+}
+float sdCapsule(vec3 p, vec3 a, vec3 b, float r) {
+  vec3 pa = p - a, ba = b - a;
+  float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+  return length(pa - ba * h) - r;
+}
+float sdCone(vec3 p, float r, float h) {
+  float q = length(p.xz);
+  return max(dot(normalize(vec2(h, r)), vec2(q, p.y - h)), -p.y);
+}
+
+// Smooth union helper for organic slime/rubble
+float smin(float a, float b, float k) {
+  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+  return mix(b, a, h) - k * h * (1.0 - h);
+}
+
+// Ray-sphere quick intersection for per-pixel entity pre-culling
+bool hitSphere(vec3 ro, vec3 rd, vec3 center, float radius) {
+  vec3 oc = ro - center;
+  float b = dot(oc, rd);
+  float c = dot(oc, oc) - radius * radius;
+  return (b * b - c) > 0.0;
+}
+
+// Fetch integer map cell safely
+ivec4 getTile(ivec2 tc) {
+  if (tc.x < 0 || tc.y < 0 || tc.x >= ${GRID_W} || tc.y >= ${GRID_H}) return ivec4(0);
+  return ivec4(floor(texelFetch(uMapTex, tc, 0) * 255.0 + 0.5));
+}
+
+// ============================================================================
+// TILE ARCHITECTURE & PROP SDFs
+// ============================================================================
+vec2 opU(vec2 a, vec2 b) { return a.x < b.x ? a : b; }
+
+// Evaluate a single tile's walls, doors, stairs, jail bars & prop at world position p
+vec2 sdSingleTile(vec3 p, ivec2 tc, ivec4 td, bool includeDetail) {
+  vec2 center = vec2(tc) * 2.0;
+  vec3 lp = vec3(p.x - center.x, p.y, p.z - center.y); // local XZ in [-1, 1] inside tile
+  int ctype = td.r;
+  int prop = td.g;
+  int param = td.b;
+
+  vec2 res = vec2(100.0, float(MAT_VOID));
+
+  if (ctype == ${G_VOID}) {
+    // Solid void floor mask below cutaway level
+    return vec2(100.0, float(MAT_VOID));
+  }
+
+  // Full-height Back Wall (North/West perimeter)
+  if (ctype == ${G_BACK_WALL}) {
+    float jH = (float((td.a >> 2) & 7) / 7.0 - 0.4) * 0.14;
+    float wallH = 2.85 + jH;
+    float bw = sdBox(lp - vec3(0.0, wallH * 0.5, 0.0), vec3(1.0, wallH * 0.5, 1.0));
+    float cap = sdBox(lp - vec3(0.0, wallH + 0.06, 0.0), vec3(1.02, 0.07, 1.02));
+    res = opU(vec2(bw, float(MAT_WALL)), vec2(cap, float(MAT_CAP)));
+
+    if (includeDetail && param > 0) {
+      // Wall Torch on +Z face (bit 0)
+      if ((param & 1) != 0) {
+        vec3 tp = lp - vec3(0.0, 1.72, 1.02);
+        float br = sdBox(tp, vec3(0.07, 0.14, 0.07));
+        float st = sdCapsule(tp, vec3(0.0, -0.02, 0.04), vec3(0.0, 0.28, 0.24), 0.04);
+        float fl = length((tp - vec3(0.0, 0.42, 0.26)) * vec3(1.2, 0.65, 1.2)) - 0.11;
+        res = opU(res, vec2(br, float(MAT_IRON)));
+        res = opU(res, vec2(st, float(MAT_WOOD)));
+        res = opU(res, vec2(fl, float(MAT_FLAME)));
+      }
+      // Wall Torch on +X face (bit 1)
+      if ((param & 2) != 0) {
+        vec3 tp = lp - vec3(1.02, 1.72, 0.0);
+        float br = sdBox(tp, vec3(0.07, 0.14, 0.07));
+        float st = sdCapsule(tp, vec3(0.04, -0.02, 0.0), vec3(0.24, 0.28, 0.0), 0.04);
+        float fl = length((tp - vec3(0.26, 0.42, 0.0)) * vec3(1.2, 0.65, 1.2)) - 0.11;
+        res = opU(res, vec2(br, float(MAT_IRON)));
+        res = opU(res, vec2(st, float(MAT_WOOD)));
+        res = opU(res, vec2(fl, float(MAT_FLAME)));
+      }
+      // Tattered Crimson Banner on +Z face (bit 2)
+      if ((param & 4) != 0) {
+        float sway = sin(uTime * 2.2 + center.x) * 0.045 * clamp(2.35 - lp.y, 0.0, 1.4);
+        float rod = sdBox(lp - vec3(0.0, 2.38, 1.04), vec3(0.48, 0.035, 0.035));
+        float cloth = sdBox(lp - vec3(0.0, 1.72, 1.05 + sway), vec3(0.40, 0.64, 0.025));
+        res = opU(res, vec2(rod, float(MAT_IRON)));
+        res = opU(res, vec2(cloth, float(MAT_BANNER)));
+      }
+      // Tattered Crimson Banner on +X face (bit 3)
+      if ((param & 8) != 0) {
+        float sway = sin(uTime * 2.2 + center.y) * 0.045 * clamp(2.35 - lp.y, 0.0, 1.4);
+        float rod = sdBox(lp - vec3(1.04, 2.38, 0.0), vec3(0.035, 0.035, 0.48));
+        float cloth = sdBox(lp - vec3(1.05 + sway, 1.72, 0.0), vec3(0.025, 0.64, 0.40));
+        res = opU(res, vec2(rod, float(MAT_IRON)));
+        res = opU(res, vec2(cloth, float(MAT_BANNER)));
+      }
+    }
+    return res;
+  }
+
+  // Cut-Away Front Wall (South/East walls so isometric camera ALWAYS sees hero!)
+  if (ctype == ${G_CUT_WALL}) {
+    float cutH = 0.52;
+    float cw = sdBox(lp - vec3(0.0, cutH * 0.5, 0.0), vec3(1.0, cutH * 0.5, 1.0));
+    float cap = sdBox(lp - vec3(0.0, cutH + 0.04, 0.0), vec3(1.01, 0.045, 1.01));
+    return opU(vec2(cw, float(MAT_WALL)), vec2(cap, float(MAT_CAP)));
+  }
+
+  // Descending Stone Stairs (recessed steps going down into cool mist!)
+  if (ctype == ${G_STAIRS}) {
+    // Pit base + 5 descending stone steps + side curbs
+    float pit = sdBox(lp - vec3(0.0, -0.95, 0.0), vec3(1.0, 0.12, 1.0));
+    res = vec2(pit, float(MAT_STAIR_PIT));
+    for (int s = 0; s < 5; s++) {
+      float fs = float(s);
+      float st = sdBox(lp - vec3(0.0, -0.09 - fs * 0.17, -0.72 + fs * 0.34), vec3(0.86, 0.10, 0.19));
+      res = opU(res, vec2(st, float(MAT_TRIM)));
+    }
+    float curbL = sdBox(lp - vec3(-0.90, 0.14, 0.0), vec3(0.10, 0.22, 0.96));
+    float curbR = sdBox(lp - vec3(0.90, 0.14, 0.0), vec3(0.10, 0.22, 0.96));
+    res = opU(res, vec2(min(curbL, curbR), float(MAT_TRIM)));
+    return res;
+  }
+
+  // Walkable Flagstone Floor tile
+  float flBox = sdBox(lp - vec3(0.0, -0.15, 0.0), vec3(1.0, 0.15, 1.0));
+  res = vec2(flBox, float(MAT_FLOOR));
+
+  // Hinged Wooden Doors & Locked Exit Door
+  if (ctype == ${G_DOOR_H} || ctype == ${G_DOOR_V} || ctype == ${G_LOCK_H} || ctype == ${G_LOCK_V}) {
+    bool isVert = (ctype == ${G_DOOR_V} || ctype == ${G_LOCK_V});
+    bool isLocked = (ctype == ${G_LOCK_H} || ctype == ${G_LOCK_V});
+    vec3 dp = lp;
+    if (isVert) dp.xz = vec2(dp.z, -dp.x);
+    // Stone jambs
+    float jamb = min(
+      sdBox(dp - vec3(-0.88, 1.02, 0.0), vec3(0.13, 1.02, 0.20)),
+      sdBox(dp - vec3(0.88, 1.02, 0.0), vec3(0.13, 1.02, 0.20))
+    );
+    res = opU(res, vec2(jamb, float(MAT_TRIM)));
+
+    // Swinging door leaf around left hinge (-0.74, 0, 0)
+    float openAng = (float(param) / 255.0) * 1.72;
+    vec3 hp = dp - vec3(-0.74, 0.0, 0.0);
+    hp.xz = rot2(-openAng) * hp.xz;
+    float slab = sdBox(hp - vec3(0.74, 0.96, 0.0), vec3(0.73, 0.96, 0.085));
+    float straps = min(
+      sdBox(hp - vec3(0.74, 0.42, 0.0), vec3(0.71, 0.06, 0.105)),
+      sdBox(hp - vec3(0.74, 1.48, 0.0), vec3(0.71, 0.06, 0.105))
+    );
+    res = opU(res, vec2(slab, float(MAT_WOOD)));
+    res = opU(res, vec2(straps, float(MAT_IRON)));
+    if (isLocked) {
+      float pad = sdBox(hp - vec3(1.12, 0.98, 0.0), vec3(0.16, 0.20, 0.14));
+      res = opU(res, vec2(pad, float(MAT_GOLD)));
+    }
+    return res;
+  }
+
+  // Iron-Barred Jail Cell (vertical iron bars casting dramatic striped shadows!)
+  if (ctype == ${G_CELL}) {
+    if ((param & 1) != 0) {
+      // Bars along +Z edge
+      vec3 bp = lp - vec3(0.0, 0.0, 0.94);
+      float rails = min(sdBox(bp - vec3(0.0, 2.15, 0.0), vec3(1.0, 0.055, 0.055)), sdBox(bp - vec3(0.0, 1.08, 0.0), vec3(1.0, 0.045, 0.045)));
+      vec3 rep = bp;
+      rep.x = clamp(rep.x, -0.82, 0.82);
+      float cellX = round(rep.x / 0.34) * 0.34;
+      float bars = sdCyl(vec3(bp.x - cellX, bp.y - 1.12, bp.z), 0.038, 1.12);
+      res = opU(res, vec2(min(rails, bars), float(MAT_IRON)));
+    }
+    if ((param & 2) != 0) {
+      // Bars along +X edge
+      vec3 bp = lp - vec3(0.94, 0.0, 0.0);
+      float rails = min(sdBox(bp - vec3(0.0, 2.15, 0.0), vec3(0.055, 0.055, 1.0)), sdBox(bp - vec3(0.0, 1.08, 0.0), vec3(0.045, 0.045, 1.0)));
+      float cellZ = round(clamp(bp.z, -0.82, 0.82) / 0.34) * 0.34;
+      float bars = sdCyl(vec3(bp.x, bp.y - 1.12, bp.z - cellZ), 0.038, 1.12);
+      res = opU(res, vec2(min(rails, bars), float(MAT_IRON)));
+    }
+  }
+
+  // Tile Props (evaluated ONLY when ray enters this tile!)
+  if (prop == ${P_PILLAR}) {
+    float plinth = sdBox(lp - vec3(0.0, 0.15, 0.0), vec3(0.42, 0.15, 0.42));
+    float shaft  = sdBox(lp - vec3(0.0, 1.38, 0.0), vec3(0.31, 1.12, 0.31));
+    float cap    = sdBox(lp - vec3(0.0, 2.56, 0.0), vec3(0.40, 0.12, 0.40));
+    res = opU(res, vec2(min(plinth, cap), float(MAT_TRIM)));
+    res = opU(res, vec2(shaft, float(MAT_WALL)));
+  } else if (prop == ${P_BARREL}) {
+    float bulge = 1.0 - 0.14 * pow((lp.y - 0.40) / 0.40, 2.0);
+    float body = sdCyl(lp - vec3(0.0, 0.40, 0.0), 0.31 * bulge, 0.39);
+    float hoops = min(sdCyl(lp - vec3(0.0, 0.22, 0.0), 0.325, 0.032), sdCyl(lp - vec3(0.0, 0.58, 0.0), 0.325, 0.032));
+    res = opU(res, vec2(body, float(MAT_WOOD)));
+    res = opU(res, vec2(hoops, float(MAT_IRON)));
+  } else if (prop == ${P_CRATE}) {
+    float box = sdBox(lp - vec3(0.0, 0.37, 0.0), vec3(0.36, 0.37, 0.36));
+    float rim = sdBox(lp - vec3(0.0, 0.68, 0.0), vec3(0.38, 0.055, 0.38));
+    res = opU(res, vec2(box, float(MAT_WOOD)));
+    res = opU(res, vec2(rim, float(MAT_IRON)));
+  } else if (prop == ${P_BRAZIER}) {
+    float stand = sdCyl(lp - vec3(0.0, 0.38, 0.0), 0.24, 0.38);
+    float bowl = sdCyl(lp - vec3(0.0, 0.80, 0.0), 0.36 + max(0.0, lp.y - 0.68) * 0.35, 0.14);
+    res = opU(res, vec2(min(stand, bowl), float(MAT_IRON)));
+    if (includeDetail) {
+      float ph = float(param) * 0.0246;
+      float fl = 1.0 + 0.14 * sin(uTime * 13.0 + ph) + 0.09 * cos(uTime * 21.0 + ph);
+      vec3 fp = lp - vec3(0.0, 1.06, 0.0);
+      fp.x += sin(uTime * 15.0 + fp.y * 8.0 + ph) * 0.035;
+      float fire = length(fp * vec3(1.15, 0.52 / fl, 1.15)) - 0.22;
+      res = opU(res, vec2(fire, float(MAT_FLAME)));
+    }
+  } else if (prop == ${P_CHEST}) {
+    float openAng = (float(param) / 255.0) * 1.65;
+    float base = sdBox(lp - vec3(0.0, 0.21, 0.0), vec3(0.43, 0.21, 0.29));
+    float lock = sdBox(lp - vec3(0.0, 0.36, 0.30), vec3(0.075, 0.085, 0.04));
+    vec3 lidP = lp - vec3(0.0, 0.42, -0.28);
+    lidP.yz = rot2(openAng) * lidP.yz;
+    float lid = sdBox(lidP - vec3(0.0, 0.10, 0.28), vec3(0.44, 0.10, 0.30));
+    res = opU(res, vec2(min(base, lid), float(MAT_WOOD)));
+    res = opU(res, vec2(lock, float(MAT_GOLD)));
+    if (openAng < 1.2) {
+      float gold = sdBox(lp - vec3(0.0, 0.38, 0.0), vec3(0.34, 0.08, 0.20));
+      res = opU(res, vec2(gold, float(MAT_GOLD)));
+    }
+  } else if (prop == ${P_RUBBLE} && includeDetail) {
+    float r1 = length((lp - vec3(-0.22, 0.10, 0.14)) * vec3(1.0, 1.4, 1.1)) - 0.18;
+    float r2 = length((lp - vec3(0.18, 0.08, -0.16)) * vec3(1.2, 1.5, 0.9)) - 0.15;
+    float r3 = length((lp - vec3(0.06, 0.07, 0.22)) * vec3(1.1, 1.6, 1.1)) - 0.12;
+    res = opU(res, vec2(min(r1, min(r2, r3)), float(MAT_TRIM)));
+  } else if (prop == ${P_BONES} && includeDetail) {
+    float b1 = sdCapsule(lp, vec3(-0.22, 0.04, -0.10), vec3(0.18, 0.04, 0.12), 0.028);
+    float b2 = sdCapsule(lp, vec3(-0.14, 0.04, 0.22), vec3(0.16, 0.04, -0.18), 0.026);
+    float sk = sdRoundBox(lp - vec3(0.18, 0.09, 0.10), vec3(0.09, 0.08, 0.09), 0.025);
+    res = opU(res, vec2(min(sk, min(b1, b2)), float(MAT_BONE)));
+  } else if (prop == ${P_SPIKES}) {
+    float plate = sdBox(lp - vec3(0.0, 0.025, 0.0), vec3(0.72, 0.025, 0.72));
+    res = opU(res, vec2(plate, float(MAT_IRON)));
+    float ph = (float(param) / 255.0) * 6.28318;
+    float cyc = mod(uTime * 0.9 + ph, 3.6);
+    float ext = (cyc > 2.25 && cyc < 3.05) ? 0.46 : ((cyc > 1.9 && cyc <= 2.25) ? 0.14 : -0.12);
+    if (ext > 0.01) {
+      vec3 sp = lp;
+      sp.x = sp.x - clamp(round(sp.x / 0.42), -1.0, 1.0) * 0.42;
+      sp.z = sp.z - clamp(round(sp.z / 0.42), -1.0, 1.0) * 0.42;
+      float spikes = sdCone(sp - vec3(0.0, 0.02, 0.0), 0.065, ext);
+      res = opU(res, vec2(spikes, float(MAT_STEEL)));
+    }
+  } else if (prop == ${P_BLADE_X} || prop == ${P_BLADE_Z}) {
+    vec3 bp = lp;
+    if (prop == ${P_BLADE_Z}) bp.xz = vec2(bp.z, -bp.x);
+    float ph = (float(param) / 255.0) * 6.28318;
+    float swing = sin(uTime * 2.15 + ph) * 0.82;
+    float beam = sdBox(bp - vec3(0.0, 2.85, 0.0), vec3(1.0, 0.08, 0.08));
+    vec3 pp = bp - vec3(0.0, 2.85, 0.0);
+    pp.xy = rot2(-swing) * pp.xy;
+    float rod = sdCapsule(pp, vec3(0.0), vec3(0.0, -2.15, 0.0), 0.036);
+    float axe = sdBox(pp - vec3(0.0, -2.20, 0.0), vec3(0.46, 0.18, 0.035));
+    res = opU(res, vec2(min(beam, rod), float(MAT_IRON)));
+    res = opU(res, vec2(axe, float(MAT_STEEL)));
+  }
+
+  return res;
+}
+
+// Continuous Static Dungeon SDF (samples current tile + closest neighbors so walls & doors have zero seams!)
+vec2 mapStatic(vec3 p, bool includeDetail) {
+  vec2 tcF = p.xz * 0.5 + 0.5;
+  ivec2 tc = ivec2(floor(tcF));
+  vec2 fr = fract(tcF) - 0.5;
+
+  ivec4 td0 = getTile(tc);
+  vec2 res = sdSingleTile(p, tc, td0, includeDetail);
+
+  // Check nearest 2 axial neighbors + diagonal corner if close to tile border
+  int sx = fr.x >= 0.0 ? 1 : -1;
+  int sz = fr.y >= 0.0 ? 1 : -1;
+  if (abs(fr.x) > 0.16) {
+    ivec2 nx = tc + ivec2(sx, 0);
+    res = opU(res, sdSingleTile(p, nx, getTile(nx), includeDetail));
+  }
+  if (abs(fr.y) > 0.16) {
+    ivec2 nz = tc + ivec2(0, sz);
+    res = opU(res, sdSingleTile(p, nz, getTile(nz), includeDetail));
+  }
+  if (abs(fr.x) > 0.25 && abs(fr.y) > 0.25) {
+    ivec2 nd = tc + ivec2(sx, sz);
+    res = opU(res, sdSingleTile(p, nd, getTile(nd), false));
+  }
+  return res;
+}
+
+// ============================================================================
+// ARTICULATED HERO & MONSTER SDFs (Pre-culled by ray-sphere bitmask!)
+// ============================================================================
+vec2 sdHero(vec3 p) {
+  vec3 q = p - vec3(uHeroPos.x, uHeroPos.y, uHeroPos.z);
+  float ang = uHeroState.x;
+  q.xz = rot2(-ang) * q.xz; // local +Z = forward, +X = hero left? Let's keep +Z forward, +X right
+
+  float wp = uHeroState.y;
+  float mv = uHeroState.z;
+  float stride = sin(wp) * mv * 0.24;
+
+  // Hit flinch tilt
+  float flinch = max(0.0, uHeroState.w);
+  if (flinch > 0.0) q.yz = rot2(flinch * 0.35) * q.yz;
+
+  // Walking legs & boots
+  float lLeg = sdCapsule(q, vec3(-0.13, 0.45, 0.0), vec3(-0.13, 0.08, stride), 0.085);
+  float rLeg = sdCapsule(q, vec3(0.13, 0.45, 0.0), vec3(0.13, 0.08, -stride), 0.085);
+  vec2 res = vec2(min(lLeg, rLeg), float(MAT_ARMOR));
+
+  // Torso cuirass & pauldrons
+  float swingP = uHeroSwing.x;
+  float swingDir = uHeroSwing.y;
+  float torsoTwist = 0.0;
+  if (swingP >= 0.0) {
+    float yaw = (swingP < 0.25) ? mix(0.0, -1.2 * swingDir, swingP / 0.25)
+              : (swingP < 0.65) ? mix(-1.2 * swingDir, 1.35 * swingDir, 1.0 - pow(1.0 - (swingP - 0.25) / 0.40, 3.0))
+              : mix(1.35 * swingDir, 0.0, (swingP - 0.65) / 0.35);
+    torsoTwist = yaw;
+  }
+
+  vec3 tq = q - vec3(0.0, 0.76, 0.0);
+  tq.xz = rot2(-torsoTwist * 0.30) * tq.xz;
+  float chest = sdRoundBox(tq, vec3(0.22, 0.26, 0.15), 0.03);
+  float pauld = min(
+    sdRoundBox(tq - vec3(-0.27, 0.20, 0.0), vec3(0.10, 0.08, 0.12), 0.025),
+    sdRoundBox(tq - vec3(0.27, 0.20, 0.0), vec3(0.10, 0.08, 0.12), 0.025)
+  );
+  res = opU(res, vec2(min(chest, pauld), float(MAT_ARMOR)));
+
+  // Flowing cloak & pointed hood
+  float capeSway = 0.16 + mv * 0.20 + sin(uTime * 3.5) * 0.04;
+  vec3 cp = tq - vec3(0.0, 0.20, -0.15);
+  cp.yz = rot2(-capeSway) * cp.yz;
+  float cape = sdBox(cp - vec3(0.0, -0.34, -0.03), vec3(0.24, 0.34, 0.04));
+  float hood = sdRoundBox(tq - vec3(0.0, 0.42, 0.02), vec3(0.19, 0.19, 0.20), 0.04);
+  float face = sdBox(tq - vec3(0.0, 0.40, 0.15), vec3(0.11, 0.11, 0.07));
+  res = opU(res, vec2(min(cape, hood), float(MAT_CLOAK)));
+  res = opU(res, vec2(face, float(MAT_SKIN)));
+
+  // Left arm holding burning torch high & swaying with steps!
+  float torchSway = sin(wp) * 0.07 * mv;
+  vec3 lHand = vec3(-0.34, 0.26 + torchSway, 0.34);
+  float lArm = sdCapsule(tq, vec3(-0.28, 0.18, 0.02), lHand, 0.068);
+  float tStick = sdCapsule(tq, lHand - vec3(0.0, 0.12, 0.0), lHand + vec3(0.0, 0.42, 0.02), 0.035);
+  float tCup = sdCyl(tq - (lHand + vec3(0.0, 0.42, 0.02)), 0.07, 0.065);
+  vec3 flP = tq - (lHand + vec3(0.0, 0.56, 0.02));
+  flP.x += sin(uTime * 18.0 + flP.y * 10.0) * 0.025;
+  float tFlame = length(flP * vec3(1.2, 0.62, 1.2)) - 0.11;
+  res = opU(res, vec2(lArm, float(MAT_CLOAK)));
+  res = opU(res, vec2(tStick, float(MAT_WOOD)));
+  res = opU(res, vec2(tCup, float(MAT_IRON)));
+  res = opU(res, vec2(tFlame, float(MAT_FLAME)));
+
+  // Right arm holding gleaming Broadsword (swings dynamically!)
+  vec3 sq = tq - vec3(0.28, 0.16, 0.02);
+  sq.xz = rot2(-torsoTwist) * sq.xz;
+  float rArm = sdCapsule(sq, vec3(0.0), vec3(0.02, -0.18, 0.24), 0.068);
+  float guard = sdBox(sq - vec3(0.02, -0.18, 0.30), vec3(0.14, 0.03, 0.035));
+  float blade = sdCapsule(sq, vec3(0.02, -0.18, 0.30), vec3(0.02, -0.12, 1.15), 0.038);
+  res = opU(res, vec2(rArm, float(MAT_ARMOR)));
+  res = opU(res, vec2(guard, float(MAT_GOLD)));
+  res = opU(res, vec2(blade, float(MAT_STEEL)));
+
+  return res;
+}
+
+vec2 sdMonster(vec3 p, int idx) {
+  vec4 m0 = uMob0[idx];
+  vec4 m1 = uMob1[idx];
+  vec4 m2 = uMob2[idx];
+  int kind = int(m0.w + 0.5);
+  vec3 q = p - vec3(m0.x, 0.0, m0.y);
+  q.xz = rot2(-m0.z) * q.xz;
+
+  float wp = m1.x;
+  float atk = m1.y;
+  float wind = m2.x;
+  vec2 res = vec2(100.0, 0.0);
+
+  if (kind == 0) {
+    // SKELETON (bone limbs, ribcage, skull with glowing amber eyes, rusted shield & cleaver!)
+    float st = sin(wp) * 0.20;
+    float legs = min(
+      sdCapsule(q, vec3(-0.11, 0.45, 0.0), vec3(-0.11, 0.04, st), 0.042),
+      sdCapsule(q, vec3(0.11, 0.45, 0.0), vec3(0.11, 0.04, -st), 0.042)
+    );
+    vec3 tq = q - vec3(0.0, 0.74 + abs(cos(wp)) * 0.05, 0.0);
+    float spine = sdCapsule(tq, vec3(0.0, -0.25, 0.0), vec3(0.0, 0.25, 0.0), 0.045);
+    float ribs = sdBox(tq - vec3(0.0, 0.04, 0.0), vec3(0.16, 0.14, 0.10));
+    float skull = sdRoundBox(tq - vec3(0.0, 0.38, 0.02), vec3(0.14, 0.14, 0.14), 0.03);
+    res = vec2(min(min(legs, spine), min(ribs, skull)), float(MAT_BONE));
+
+    float eyeR = wind > 0.0 ? 0.052 : 0.040;
+    float eyes = min(
+      length(tq - vec3(-0.065, 0.39, 0.155)) - eyeR,
+      length(tq - vec3(0.065, 0.39, 0.155)) - eyeR
+    );
+    res = opU(res, vec2(eyes, float(MAT_EYE_AMB)));
+
+    // Buckler shield + swinging cleaver
+    float shield = sdCyl((tq - vec3(-0.26, -0.02, 0.16)).xzy, 0.18, 0.035);
+    float armPitch = wind > 0.0 ? -1.1 : (atk > 0.0 ? 0.85 : -0.15);
+    vec3 aq = tq - vec3(0.24, 0.12, 0.0);
+    aq.yz = rot2(armPitch) * aq.yz;
+    float cleaver = sdCapsule(aq, vec3(0.0, -0.10, 0.06), vec3(0.0, -0.12, 0.62), 0.036);
+    res = opU(res, vec2(min(shield, cleaver), float(MAT_IRON)));
+  } else if (kind == 1) {
+    // GIANT RAT (hunched furry body, pointed snout, ears, twitching tail, bright red eyes!)
+    float sk = sin(wp * 1.8);
+    vec3 tq = q - vec3(0.0, 0.26 + (atk > 0.0 ? 0.16 : abs(sk) * 0.04), 0.0);
+    float body = length(tq * vec3(1.25, 1.38, 0.78)) - 0.28;
+    float snout = sdCapsule(tq, vec3(0.0, 0.02, 0.26), vec3(0.0, 0.0, 0.50), 0.09);
+    float tail = sdCapsule(tq, vec3(0.0, -0.02, -0.26), vec3(sk * 0.16, -0.04, -0.76), 0.032);
+    res = vec2(min(min(body, snout), tail), float(MAT_RAT));
+    float eyeR = wind > 0.0 ? 0.052 : 0.040;
+    float eyes = min(
+      length(tq - vec3(-0.08, 0.09, 0.39)) - eyeR,
+      length(tq - vec3(0.08, 0.09, 0.39)) - eyeR
+    );
+    res = opU(res, vec2(eyes, float(MAT_EYE_RED)));
+  } else if (kind == 2) {
+    // DUNGEON SLIME (bouncy translucent-look gelatinous dome + bright lime eyes!)
+    float hop = abs(sin(wp * 0.85)) * 0.22;
+    float sq = 1.0 + cos(wp * 1.7) * 0.14;
+    vec3 bq = q - vec3(0.0, hop, 0.0);
+    vec3 sc = vec3(bq.x / sq, (bq.y - 0.12) * sq, bq.z / sq);
+    float dome = max(length(sc) - 0.44, -bq.y);
+    res = vec2(dome, float(MAT_SLIME));
+    float eyeR = wind > 0.0 ? 0.065 : 0.052;
+    float eyes = min(
+      length(bq - vec3(-0.15, 0.29, 0.36)) - eyeR,
+      length(bq - vec3(0.15, 0.29, 0.36)) - eyeR
+    );
+    res = opU(res, vec2(eyes, float(MAT_EYE_GRN)));
+  } else {
+    // THE BONE WARDEN BOSS (1.48x armored dread lord, horns, crown, crimson cape, greatsword!)
+    vec3 bq = q / 1.48;
+    float st = sin(wp) * 0.20;
+    float legs = min(
+      sdCapsule(bq, vec3(-0.18, 0.50, 0.0), vec3(-0.18, 0.05, st), 0.10),
+      sdCapsule(bq, vec3(0.18, 0.50, 0.0), vec3(0.18, 0.05, -st), 0.10)
+    );
+    vec3 tq = bq - vec3(0.0, 0.84 + abs(cos(wp)) * 0.04, 0.0);
+    float chest = sdRoundBox(tq, vec3(0.30, 0.31, 0.19), 0.04);
+    float pauld = min(
+      sdRoundBox(tq - vec3(-0.39, 0.24, 0.0), vec3(0.14, 0.12, 0.16), 0.03),
+      sdRoundBox(tq - vec3(0.39, 0.24, 0.0), vec3(0.14, 0.12, 0.16), 0.03)
+    );
+    float shield = sdBox(tq - vec3(-0.46, -0.04, 0.20), vec3(0.06, 0.36, 0.22));
+    res = vec2(min(min(legs, chest), min(pauld, shield)) * 1.48, float(MAT_ARMOR));
+
+    float cape = sdBox(tq - vec3(0.0, -0.14, -0.25), vec3(0.32, 0.44, 0.045)) * 1.48;
+    res = opU(res, vec2(cape, float(MAT_BOSS_CAPE)));
+
+    float skull = sdRoundBox(tq - vec3(0.0, 0.48, 0.03), vec3(0.17, 0.17, 0.17), 0.035);
+    float hornL = sdCapsule(tq, vec3(-0.16, 0.58, 0.03), vec3(-0.34, 0.76, 0.06), 0.045);
+    float hornR = sdCapsule(tq, vec3(0.16, 0.58, 0.03), vec3(0.34, 0.76, 0.06), 0.045);
+    res = opU(res, vec2(min(skull, min(hornL, hornR)) * 1.48, float(MAT_BONE)));
+
+    float eyeR = wind > 0.0 ? 0.062 : 0.048;
+    float eyes = min(
+      length(tq - vec3(-0.08, 0.50, 0.20)) - eyeR,
+      length(tq - vec3(0.08, 0.50, 0.20)) - eyeR
+    ) * 1.48;
+    res = opU(res, vec2(eyes, float(MAT_EYE_RED)));
+
+    float armPitch = wind > 0.0 ? -1.2 : (atk > 0.0 ? 0.85 : -0.18);
+    vec3 aq = tq - vec3(0.42, 0.14, 0.0);
+    aq.yz = rot2(armPitch) * aq.yz;
+    float gBlade = sdCapsule(aq, vec3(0.0, -0.12, 0.10), vec3(0.0, -0.10, 1.15), 0.062) * 1.48;
+    res = opU(res, vec2(gBlade, float(MAT_STEEL)));
+  }
+
+  return res;
+}
+
+vec2 sdItem(vec3 p, int idx) {
+  vec4 it = uItems[idx];
+  vec3 q = p - it.xyz;
+  int kind = int(it.w + 0.5);
+  q.xz = rot2(-uTime * 2.4 - float(idx)) * q.xz;
+  if (kind == 0) {
+    // Golden Dungeon Key
+    float ring = abs(length(q.xy - vec2(0.0, 0.20)) - 0.16) - 0.045;
+    ring = max(ring, abs(q.z) - 0.045);
+    float shaft = sdCapsule(q, vec3(0.0, 0.04, 0.0), vec3(0.0, -0.32, 0.0), 0.042);
+    float teeth = sdBox(q - vec3(0.09, -0.24, 0.0), vec3(0.08, 0.06, 0.035));
+    return vec2(min(ring, min(shaft, teeth)), float(MAT_GOLD));
+  } else if (kind == 1) {
+    // Gold Coin
+    float coin = sdCyl(q.xzy, 0.15, 0.035);
+    return vec2(coin, float(MAT_GOLD));
+  } else {
+    // Health Potion Flask
+    float flask = length(q) - 0.16;
+    float neck = sdCyl(q - vec3(0.0, 0.17, 0.0), 0.055, 0.07);
+    return opU(vec2(flask, float(MAT_POTION)), vec2(neck, float(MAT_STEEL)));
+  }
+}
+
+vec2 sdGib(vec3 p, int idx) {
+  vec4 g = uGibs[idx];
+  int kind = int(floor(g.w));
+  float sc = max(0.05, fract(g.w));
+  vec3 q = (p - g.xyz) / sc;
+  if (kind == 0) {
+    // Tumbling Bone
+    return vec2(sdCapsule(q, vec3(-0.14, 0.0, 0.0), vec3(0.14, 0.0, 0.0), 0.045) * sc, float(MAT_BONE));
+  } else if (kind == 1) {
+    // Bouncing Emerald Slime Goo
+    float flatY = g.y < 0.10 ? 2.2 : 1.0;
+    return vec2((length(q * vec3(1.0, flatY, 1.0)) - 0.13) * sc / flatY, float(MAT_SLIME));
+  } else {
+    // Dark armor/rat chunk
+    return vec2((length(q) - 0.12) * sc, float(MAT_RAT));
+  }
+}
+
+// ============================================================================
+// COMBINED SCENE EVALUATION (Using per-ray pre-culled entity masks!)
+// ============================================================================
+vec3 mapScene(vec3 p, bool hitHero, int mobMask, int itemMask, int gibMask, bool detail) {
+  // returns vec3(dist, matId, entityIndex: -1=static, -2=hero, >=0=mobIdx)
+  vec2 st = mapStatic(p, detail);
+  vec3 res = vec3(st.x, st.y, -1.0);
+
+  if (hitHero) {
+    vec2 hd = sdHero(p);
+    if (hd.x < res.x) res = vec3(hd.x, hd.y, -2.0);
+  }
+  if (mobMask != 0) {
+    for (int i = 0; i < ${MAX_MOBS}; i++) {
+      if ((mobMask & (1 << i)) != 0) {
+        vec2 md = sdMonster(p, i);
+        if (md.x < res.x) res = vec3(md.x, md.y, float(i));
+      }
+    }
+  }
+  if (itemMask != 0) {
+    for (int i = 0; i < ${MAX_ITEMS}; i++) {
+      if ((itemMask & (1 << i)) != 0) {
+        vec2 id = sdItem(p, i);
+        if (id.x < res.x) res = vec3(id.x, id.y, -3.0);
+      }
+    }
+  }
+  if (gibMask != 0) {
+    for (int i = 0; i < ${MAX_GIBS}; i++) {
+      if ((gibMask & (1 << i)) != 0) {
+        vec2 gd = sdGib(p, i);
+        if (gd.x < res.x) res = vec3(gd.x, gd.y, -3.0);
+      }
+    }
+  }
+  return res;
+}
+
+vec3 calcNormal(vec3 p, bool hitHero, int mobMask, int itemMask, int gibMask) {
+  const float e = 0.008;
+  vec2 h = vec2(e, -e);
+  return normalize(
+    h.xyy * mapScene(p + h.xyy, hitHero, mobMask, itemMask, gibMask, true).x +
+    h.yyx * mapScene(p + h.yyx, hitHero, mobMask, itemMask, gibMask, true).x +
+    h.yxy * mapScene(p + h.yxy, hitHero, mobMask, itemMask, gibMask, true).x +
+    h.xxx * mapScene(p + h.xxx, hitHero, mobMask, itemMask, gibMask, true).x
+  );
+}
+
+// REAL RAYMARCHED SOFT SHADOWS (Hero's flickering torch through pillars, bars, crates & monsters!)
+float calcSoftShadow(vec3 ro, vec3 lightPos, int skipMob) {
+  vec3 toL = lightPos - ro;
+  float maxT = length(toL);
+  if (maxT < 0.05) return 1.0;
+  vec3 rd = toL / maxT;
+
+  // Pre-cull monsters along this shadow ray
+  int sMobMask = 0;
+  for (int i = 0; i < ${MAX_MOBS}; i++) {
+    if (i >= uMobCount || i == skipMob) continue;
+    vec3 mc = vec3(uMob0[i].x, 0.85, uMob0[i].y);
+    if (hitSphere(ro, rd, mc, uMob2[i].z + 0.72)) sMobMask |= (1 << i);
+  }
+
+  float res = 1.0;
+  float t = 0.08;
+  for (int i = 0; i < 30; i++) {
+    vec3 p = ro + rd * t;
+    float d = mapStatic(p, false).x;
+    if (sMobMask != 0) {
+      for (int m = 0; m < ${MAX_MOBS}; m++) {
+        if ((sMobMask & (1 << m)) != 0) {
+          d = min(d, sdMonster(p, m).x);
+        }
+      }
+    }
+    if (d < 0.004) return 0.04;
+    res = min(res, 9.5 * d / t);
+    t += clamp(d, 0.04, 0.55);
+    if (t >= maxT - 0.12) break;
+  }
+  return clamp(res, 0.04, 1.0);
+}
+
+// ============================================================================
+// PROCEDURAL 3D MATERIALS (Stone Blocks, Flagstones, Cracks, Moss, Puddles, Runes, Wood)
+// ============================================================================
+struct SurfMat {
+  vec3 albedo;
+  vec3 emissive;
+  vec3 normal;
+  float rough;
+  float metal;
+  float puddleMask;
+};
+
+SurfMat evalMaterial(vec3 p, vec3 N, int matId, float entId) {
+  SurfMat m;
+  m.albedo = vec3(0.32, 0.35, 0.40);
+  m.emissive = vec3(0.0);
+  m.normal = N;
+  m.rough = 0.90;
+  m.metal = 0.04;
+  m.puddleMask = 0.0;
+
+  if (matId == MAT_WALL) {
+    // 3D Rough Hewn Stone-Block Masonry + Mortar Joints + Grime + Micro-Bump!
+    float u = (abs(N.x) > 0.5) ? p.z : p.x;
+    float v = p.y;
+    float row = floor(v * 2.75);
+    float off = mod(row, 2.0) * 0.42;
+    vec2 bId = vec2(floor(u * 1.15 + off), row);
+    vec2 bF = fract(vec2(u * 1.15 + off, v * 2.75));
+    float mortar = smoothstep(0.0, 0.075, bF.x) * smoothstep(0.0, 0.075, 1.0 - bF.x)
+                 * smoothstep(0.0, 0.095, bF.y) * smoothstep(0.0, 0.095, 1.0 - bF.y);
+    float sh = 0.72 + hash12(bId) * 0.34;
+    float grit = noise2(vec2(u, v) * 9.0) * 0.16;
+    vec3 stone = vec3(0.28, 0.31, 0.36) * sh * (0.90 + grit);
+    // Subtle moss & damp base grime near floor
+    float grime = smoothstep(0.0, 0.65, p.y);
+    float moss = smoothstep(0.58, 0.85, noise2(vec2(u, v) * 3.2)) * (1.0 - smoothstep(0.1, 0.95, p.y));
+    stone = mix(stone, vec3(0.14, 0.24, 0.13), moss * 0.55);
+    stone *= mix(0.52, 1.0, grime);
+    m.albedo = mix(vec3(0.06, 0.08, 0.11), stone, mortar);
+    // Analytical stone bump
+    vec3 tng = abs(N.x) > 0.5 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    float bm = (noise2(vec2(u, v) * 14.0) - 0.5) * 0.16 + (1.0 - mortar) * 0.25;
+    m.normal = normalize(N + tng * (bF.x - 0.5) * (1.0 - mortar) * 0.35 + vec3(0.0, (bF.y - 0.5) * (1.0 - mortar) * 0.35, 0.0) + tng * bm * 0.25);
+    // Delicate procedural cobweb strands tucked in high back-wall corners!
+    if (p.y > 1.75) {
+      vec2 tcF = p.xz * 0.5 + 0.5;
+      ivec2 tc = ivec2(floor(tcF));
+      ivec4 td = getTile(tc);
+      if ((td.b & 16) != 0) {
+        vec2 lp = (fract(tcF) - 0.5) * 2.0;
+        vec2 cw = vec2(lp.x + 1.0, 2.85 - p.y);
+        float cr = length(cw);
+        if (cr < 0.85) {
+          float ca = atan(cw.y, cw.x);
+          float spokes = smoothstep(0.06, 0.01, abs(fract(ca * 2.8) - 0.5));
+          float rings = smoothstep(0.06, 0.01, abs(fract(cr * 5.0) - 0.5));
+          float web = max(spokes, rings) * smoothstep(0.85, 0.15, cr) * 0.45;
+          m.albedo = mix(m.albedo, vec3(0.68, 0.72, 0.80), web);
+        }
+      }
+    }
+    m.rough = 0.94;
+  } else if (matId == MAT_CAP) {
+    float g = noise2(p.xz * 6.0);
+    m.albedo = vec3(0.055, 0.072, 0.10) * (0.85 + g * 0.3);
+    m.rough = 0.98;
+  } else if (matId == MAT_FLOOR || matId == MAT_TRIM) {
+    // Cracked Flagstone Slabs + Moss Crevices + Puddles + Glowing Blue Magic Runes + Moonlight Grate!
+    vec2 sc = p.xz * 1.05;
+    float row = floor(sc.y);
+    vec2 sId = vec2(floor(sc.x + mod(row, 2.0) * 0.45), row);
+    vec2 sF = fract(vec2(sc.x + mod(row, 2.0) * 0.45, sc.y));
+    float joint = smoothstep(0.0, 0.065, sF.x) * smoothstep(0.0, 0.065, 1.0 - sF.x)
+                * smoothstep(0.0, 0.065, sF.y) * smoothstep(0.0, 0.065, 1.0 - sF.y);
+    float sh = 0.78 + hash12(sId) * 0.28;
+    float grit = noise2(p.xz * 8.5);
+    float crack = smoothstep(0.015, 0.045, abs(noise2(p.xz * 3.8 + sId * 3.1) - 0.5));
+    vec3 slab = (matId == MAT_TRIM ? vec3(0.29, 0.33, 0.39) : vec3(0.26, 0.29, 0.34)) * sh * (0.88 + grit * 0.22);
+    slab *= mix(0.45, 1.0, crack);
+    m.albedo = mix(vec3(0.055, 0.07, 0.095), slab, joint);
+    m.normal = normalize(N + vec3((grit - 0.5) * 0.10, 0.0, (noise2(p.xz * 8.5 + 7.1) - 0.5) * 0.10));
+
+    if (matId == MAT_FLOOR) {
+      vec2 tcF = p.xz * 0.5 + 0.5;
+      ivec2 tc = ivec2(floor(tcF));
+      vec2 lp = (fract(tcF) - 0.5) * 2.0;
+      ivec4 td = getTile(tc);
+
+      // Moss in damper flagstones (A bit 1)
+      if ((td.a & 2) != 0) {
+        float mf = smoothstep(0.42, 0.72, noise2(p.xz * 2.6 + 1.3)) * (1.2 - joint * 0.6);
+        m.albedo = mix(m.albedo, vec3(0.14, 0.24, 0.12), clamp(mf * 0.65, 0.0, 0.75));
+      }
+
+      // Damp Firelight-Reflecting Puddle (A bit 0)
+      if ((td.a & 1) != 0) {
+        float ang = atan(lp.y, lp.x);
+        float rad = 0.72 + 0.12 * sin(ang * 3.0 + float(tc.x)) + 0.07 * cos(ang * 5.0 - float(tc.y));
+        float dP = length(lp) / rad;
+        float wetRim = smoothstep(1.12, 0.85, dP);
+        float pMask = smoothstep(0.98, 0.68, dP);
+        m.albedo *= mix(1.0, 0.45, wetRim);
+        if (pMask > 0.01) {
+          m.puddleMask = pMask;
+          m.rough = mix(m.rough, 0.06, pMask);
+          m.albedo = mix(m.albedo, vec3(0.025, 0.04, 0.065), pMask * 0.72);
+          float rip = sin(p.x * 9.0 + uTime * 2.6) * cos(p.z * 8.2 - uTime * 2.2);
+          float rip2 = sin((p.x - p.z) * 12.0 + uTime * 3.5);
+          m.normal = normalize(mix(m.normal, normalize(vec3((rip + rip2 * 0.45) * 0.055, 1.0, (rip - rip2 * 0.45) * 0.055)), pMask));
+        }
+      }
+
+      // Glowing Cyan-Blue Magic Rune etched into flagstones!
+      if (td.g == ${P_RUNE}) {
+        float r = length(lp);
+        float a = atan(lp.y, lp.x) + uTime * 0.22;
+        float ring1 = smoothstep(0.055, 0.012, abs(r - 0.78));
+        float ring2 = smoothstep(0.045, 0.012, abs(r - 0.54));
+        float hex = smoothstep(0.045, 0.012, abs(r * cos(mod(a, 1.0472) - 0.5236) - 0.44));
+        float ticks = smoothstep(0.04, 0.01, abs(r - 0.66)) * smoothstep(0.6, 0.9, sin(a * 12.0));
+        float glow = exp(-r * r * 2.2) * 0.42;
+        float pulse = 0.78 + 0.22 * sin(uTime * 2.6 + float(td.b) * 0.04);
+        float sigil = clamp(ring1 + ring2 + hex * 0.85 + ticks + glow, 0.0, 1.5) * pulse;
+        m.emissive += vec3(0.24, 0.76, 1.15) * sigil * 1.35;
+      }
+
+      // Iron-Grate Projected Moonlight Pool on Flagstones!
+      if (td.g == ${P_MOON}) {
+        float r = length(lp);
+        float rad = 1.0 - smoothstep(0.32, 1.0, r);
+        float bx = smoothstep(0.09, 0.16, abs(fract(lp.x * 1.9 + 0.5) - 0.5));
+        float bz = smoothstep(0.09, 0.16, abs(fract(lp.y * 1.9 + 0.5) - 0.5));
+        m.emissive += vec3(0.30, 0.54, 0.88) * rad * bx * bz * 0.72;
+      }
+    }
+  } else if (matId == MAT_WOOD) {
+    float grain = noise2(vec2(p.x * 6.0 + p.z * 6.0, p.y * 18.0));
+    float plank = smoothstep(0.0, 0.08, abs(fract((p.x + p.z) * 2.2) - 0.5));
+    m.albedo = vec3(0.30, 0.20, 0.12) * (0.78 + grain * 0.34) * mix(0.65, 1.0, plank);
+    m.rough = 0.88;
+  } else if (matId == MAT_IRON) {
+    m.albedo = vec3(0.21, 0.23, 0.27) * (0.85 + noise2(p.xy * 12.0) * 0.25);
+    m.rough = 0.58; m.metal = 0.62;
+  } else if (matId == MAT_STEEL) {
+    m.albedo = vec3(0.62, 0.67, 0.74);
+    m.rough = 0.34; m.metal = 0.78;
+  } else if (matId == MAT_GOLD) {
+    m.albedo = vec3(0.88, 0.65, 0.22);
+    m.emissive = vec3(0.22, 0.13, 0.02);
+    m.rough = 0.35; m.metal = 0.78;
+  } else if (matId == MAT_BONE) {
+    m.albedo = vec3(0.76, 0.71, 0.61) * (0.9 + noise2(p.xy * 10.0) * 0.16);
+    m.rough = 0.85;
+  } else if (matId == MAT_CLOAK) {
+    m.albedo = vec3(0.20, 0.23, 0.29);
+    m.rough = 0.94;
+  } else if (matId == MAT_ARMOR) {
+    m.albedo = vec3(0.36, 0.40, 0.46);
+    m.rough = 0.52; m.metal = 0.55;
+  } else if (matId == MAT_SKIN) {
+    m.albedo = vec3(0.75, 0.56, 0.42);
+    m.rough = 0.84;
+  } else if (matId == MAT_FLAME) {
+    float core = clamp(1.0 - length(N.xz) * 0.55, 0.0, 1.0);
+    m.albedo = vec3(1.0, 0.55, 0.15);
+    m.emissive = mix(vec3(1.45, 0.52, 0.10), vec3(2.2, 1.75, 0.75), core);
+  } else if (matId == MAT_BANNER) {
+    // Faded medieval crimson heraldry with ochre trim
+    vec2 lp = fract(p.xz * 0.5 + 0.5) - 0.5;
+    float side = abs(N.x) > 0.5 ? lp.y : lp.x;
+    bool trim = abs(abs(side) - 0.16) < 0.025 || (abs(side) < 0.06 && abs(p.y - 1.85) < 0.10);
+    m.albedo = trim ? vec3(0.58, 0.44, 0.22) : vec3(0.42, 0.14, 0.14);
+    m.rough = 0.95;
+  } else if (matId == MAT_RAT) {
+    m.albedo = vec3(0.30, 0.22, 0.19) * (0.85 + noise2(p.xz * 18.0) * 0.25);
+    m.rough = 0.92;
+  } else if (matId == MAT_SLIME) {
+    // Murky emerald-olive translucent gelatin sheen
+    m.albedo = vec3(0.26, 0.46, 0.20);
+    m.emissive = vec3(0.05, 0.14, 0.03);
+    m.rough = 0.24; m.metal = 0.08;
+  } else if (matId == MAT_EYE_RED) {
+    m.emissive = vec3(2.2, 0.22, 0.18);
+  } else if (matId == MAT_EYE_AMB) {
+    m.emissive = vec3(2.1, 0.65, 0.16);
+  } else if (matId == MAT_EYE_GRN) {
+    m.emissive = vec3(1.3, 2.2, 0.35);
+  } else if (matId == MAT_POTION) {
+    m.albedo = vec3(0.82, 0.16, 0.20);
+    m.emissive = vec3(0.42, 0.06, 0.08);
+    m.rough = 0.26;
+  } else if (matId == MAT_BOSS_CAPE) {
+    m.albedo = vec3(0.38, 0.11, 0.13);
+    m.rough = 0.94;
+  } else if (matId == MAT_STAIR_PIT) {
+    m.albedo = vec3(0.02, 0.03, 0.05);
+    m.emissive = vec3(0.08, 0.20, 0.36);
+  }
+
+  // Hit-flashes & Hero heal glow!
+  if (entId == -2.0) {
+    if (uHeroState.w > 0.0) m.emissive += vec3(0.85, 0.14, 0.10) * uHeroState.w;
+    else if (uHeroState.w < 0.0) m.emissive += vec3(0.55, 0.12, 0.18) * (-uHeroState.w);
+  } else if (entId >= 0.0) {
+    int mi = int(entId + 0.5);
+    float fl = uMob1[mi].z;
+    if (fl > 0.0) m.emissive += vec3(1.45, 0.92, 0.55) * fl;
+  }
+
+  return m;
+}
+
+// Fast 5-tap L1-cached wall occlusion check so sconces/runes don't bleed through stone walls!
+float quickWallVis(vec3 p, vec3 lPos) {
+  for (int k = 1; k <= 5; k++) {
+    vec3 sp = mix(p, lPos, float(k) / 6.0);
+    ivec2 tc = ivec2(floor(sp.xz * 0.5 + 0.5));
+    int ct = getTile(tc).r;
+    if (ct == ${G_BACK_WALL} && sp.y < 2.8) return 0.08;
+    if (ct == ${G_CUT_WALL} && sp.y < 0.52) return 0.25;
+  }
+  return 1.0;
+}
+
+// Direct PBR-like point light evaluation (physically calibrated for dark gritty torchlight!)
+vec3 evalPointLight(vec3 p, vec3 N, vec3 V, SurfMat m, vec3 lPos, vec3 lCol, float intensity, float shadow) {
+  vec3 toL = lPos - p;
+  float d = length(toL);
+  if (d > 14.5 || intensity <= 0.001) return vec3(0.0);
+  vec3 L = toL / d;
+  float ndl = max(dot(N, L), 0.0);
+  if (ndl <= 0.0 && m.puddleMask <= 0.01) return vec3(0.0);
+  float atten = intensity / (1.0 + 0.34 * d + 0.24 * d * d);
+  vec3 H = normalize(L + V);
+  float specPow = mix(96.0, 12.0, m.rough);
+  float spec = pow(max(dot(N, H), 0.0), specPow) * mix(0.75, 0.04, m.rough);
+  vec3 diff = m.albedo * ndl * (1.0 - m.metal * 0.65);
+  vec3 specCol = mix(vec3(1.0), m.albedo, m.metal) * spec;
+  return lCol * atten * (diff + specCol) * shadow;
+}
+
+// Direct surface lighting (non-recursive so puddle reflections can call it safely in GLSL!)
+vec3 shadeDirect(vec3 p, vec3 N, vec3 V, int matId, float entId, bool doShadow, out SurfMat outMat) {
+  SurfMat m = evalMaterial(p, N, matId, entId);
+  outMat = m;
+  if (matId == MAT_FLAME || matId == MAT_EYE_RED || matId == MAT_EYE_AMB || matId == MAT_EYE_GRN) {
+    return m.emissive;
+  }
+
+  // Deep cold desaturated blue-grey ambient so unlit stone falls into moody shadow while showing every shape!
+  vec3 skyAmb = vec3(0.16 + uDepthTint * 0.05, 0.23, 0.36 + uDepthTint * 0.05) * 0.24;
+  vec3 gndAmb = vec3(0.05, 0.08, 0.13) * 0.22;
+  vec3 col = m.albedo * mix(gndAmb, skyAmb, N.y * 0.5 + 0.5);
+  vec3 rimDir = normalize(vec3(-0.55, 0.78, -0.42));
+  col += m.albedo * vec3(0.24, 0.36, 0.54) * max(dot(N, rimDir), 0.0) * 0.14;
+
+  // Crisp crevice AO on stone masonry & floor corners
+  if (doShadow && matId != MAT_CAP) {
+    float aoD = mapStatic(p + N * 0.20, false).x;
+    col *= clamp(aoD / 0.20, 0.38, 1.0);
+  }
+
+  // Primary Hero Torch Light with REAL RAYMARCHED SOFT SHADOWS! (THE STAR!)
+  float shadow = 1.0;
+  if (doShadow && entId != -2.0) {
+    int skipM = (entId >= 0.0) ? int(entId + 0.5) : -1;
+    shadow = calcSoftShadow(p + N * 0.03, uHeroLightPos, skipM);
+  }
+  col += evalPointLight(p, N, V, m, uHeroLightPos, uHeroLightCol, 4.9, shadow);
+
+  // Pooled Warm Wall Sconces & Braziers (wall-occluded so rooms stay distinct!)
+  for (int i = 0; i < ${MAX_WARM_LIGHTS}; i++) {
+    if (uWarmPos[i].w > 0.01) {
+      float vis = doShadow ? quickWallVis(p + N * 0.06, uWarmPos[i].xyz) : 1.0;
+      col += evalPointLight(p, N, V, m, uWarmPos[i].xyz, uWarmCol[i].rgb, uWarmPos[i].w, vis);
+    }
+  }
+  // Pooled Cold Cyan-Blue Accents (Magic Runes, Moonlight Grates, Stairs Mist)
+  for (int i = 0; i < ${MAX_COLD_LIGHTS}; i++) {
+    if (uColdPos[i].w > 0.01) {
+      float vis = doShadow ? quickWallVis(p + N * 0.06, uColdPos[i].xyz) : 1.0;
+      col += evalPointLight(p, N, V, m, uColdPos[i].xyz, uColdCol[i].rgb, uColdPos[i].w, vis);
+    }
+  }
+
+  col += m.emissive;
+  return col;
+}
+
+// Primary surface shade + TRUE RAYMARCHED MIRROR REFLECTION IN WET FLAGSTONE PUDDLES!
+vec3 shadePoint(vec3 p, vec3 N, vec3 V, int matId, float entId) {
+  SurfMat m;
+  vec3 col = shadeDirect(p, N, V, matId, entId, true, m);
+
+  if (m.puddleMask > 0.02) {
+    vec3 rDir = reflect(-V, m.normal);
+    vec3 rOrig = p + vec3(0.0, 0.04, 0.0);
+    vec3 rCol = vec3(0.02, 0.032, 0.055);
+    float rt = 0.08;
+    for (int k = 0; k < 14; k++) {
+      vec3 rp = rOrig + rDir * rt;
+      vec2 rs = mapStatic(rp, true);
+      if (rs.x < 0.02) {
+        vec3 rN = normalize(vec3(
+          mapStatic(rp + vec3(0.02,0,0), false).x - mapStatic(rp - vec3(0.02,0,0), false).x,
+          mapStatic(rp + vec3(0,0.02,0), false).x - mapStatic(rp - vec3(0,0.02,0), false).x,
+          mapStatic(rp + vec3(0,0,0.02), false).x - mapStatic(rp - vec3(0,0,0.02), false).x
+        ));
+        SurfMat dummyM;
+        rCol = shadeDirect(rp, rN, -rDir, int(rs.y + 0.5), -1.0, false, dummyM);
+        break;
+      }
+      rt += clamp(rs.x, 0.05, 0.45);
+      if (rt > 4.2 || rp.y > 3.2) break;
+    }
+    // Crisp specular firelight shimmer dancing in puddle
+    vec2 dh = p.xz - uHeroLightPos.xz;
+    float ripShimmer = smoothstep(0.25, 0.88, 0.5 + 0.5 * sin(p.x * 12.0 + uTime * 5.0) * cos(p.z * 11.0 - uTime * 4.3));
+    rCol += uHeroLightCol * exp(-dot(dh, dh) * 0.72) * (0.18 + 0.42 * ripShimmer);
+    col = mix(col, rCol, m.puddleMask * 0.58);
+  }
+
+  return col;
+}
+
+void main() {
+  // True Isometric Orthographic Camera Ray Setup
+  vec3 F = normalize(vec3(-22.0, -23.5, -22.0));
+  vec3 R = normalize(cross(F, vec3(0.0, 1.0, 0.0)));
+  vec3 U = cross(R, F);
+  vec2 ndc = vUv * 2.0 - 1.0;
+
+  vec3 roBase = uCamTarget - F * 36.0 + R * (ndc.x * uCamZoom * uAspect) + U * (ndc.y * uCamZoom);
+  vec3 rd = F;
+
+  // Clip ray analytically to the dungeon height slab (y = 3.25) so ZERO steps are wasted in empty sky!
+  float tStart = max(0.0, (3.25 - roBase.y) / rd.y);
+  float tMax   = ( -1.15 - roBase.y) / rd.y;
+
+  // Per-Ray Bounding-Sphere Pre-Culling (keeps inner loop blazingly fast at 60 FPS!)
+  bool hitHero = hitSphere(roBase, rd, vec3(uHeroPos.x, 0.85, uHeroPos.z), 1.65);
+
+  int mobMask = 0;
+  for (int i = 0; i < ${MAX_MOBS}; i++) {
+    if (i >= uMobCount) break;
+    float rBound = (uMob0[i].w > 2.5) ? 2.1 : 1.05;
+    if (hitSphere(roBase, rd, vec3(uMob0[i].x, rBound * 0.75, uMob0[i].y), rBound)) {
+      mobMask |= (1 << i);
+    }
+  }
+  int itemMask = 0;
+  for (int i = 0; i < ${MAX_ITEMS}; i++) {
+    if (i >= uItemCount) break;
+    if (hitSphere(roBase, rd, uItems[i].xyz, 0.52)) itemMask |= (1 << i);
+  }
+  int gibMask = 0;
+  for (int i = 0; i < ${MAX_GIBS}; i++) {
+    if (i >= uGibCount) break;
+    if (hitSphere(roBase, rd, uGibs[i].xyz, 0.32)) gibMask |= (1 << i);
+  }
+
+  // Primary Raymarch Loop
+  float t = tStart;
+  bool hit = false;
+  int hitMat = MAT_VOID;
+  float hitEnt = -1.0;
+
+  for (int i = 0; i < 64; i++) {
+    vec3 p = roBase + rd * t;
+    vec3 h = mapScene(p, hitHero, mobMask, itemMask, gibMask, true);
+    if (h.x < 0.0045) {
+      hit = true;
+      hitMat = int(h.y + 0.5);
+      hitEnt = h.z;
+      break;
+    }
+    // Step safely without skipping across tile walls
+    t += clamp(h.x, 0.006, 0.42);
+    if (t > tMax) break;
+  }
+
+  vec3 bgCol = vec3(0.008, 0.012, 0.022);
+  vec3 col = bgCol;
+  float normDepth = 1.0;
+
+  if (hit) {
+    vec3 hp = roBase + rd * t;
+    vec3 N = calcNormal(hp, hitHero, mobMask, itemMask, gibMask);
+    col = shadePoint(hp, N, -rd, hitMat, hitEnt);
+
+    // Subtle distance fog blending far edges into deep blue-grey cavern darkness
+    float distFromCamTarget = length(hp.xz - uCamTarget.xz);
+    float fog = 1.0 - exp(-distFromCamTarget * distFromCamTarget * 0.0028);
+    col = mix(col, bgCol, clamp(fog, 0.0, 0.78));
+
+    // Exact linear orthographic depth in [0, 1] for Depth-Aware Tilt-Shift!
+    normDepth = clamp((t - 24.0) / 28.0, 0.0, 1.0);
+  } else {
+    float tFloor = (0.0 - roBase.y) / rd.y;
+    normDepth = clamp((tFloor - 24.0) / 28.0, 0.0, 1.0);
+  }
+
+  // ============================================================================
+  // VOLUMETRIC & ADDITIVE OVERLAYS (All Pure Shader!)
+  // ============================================================================
+  float hitT = hit ? t : tMax;
+
+  // 1. Volumetric Moonlight Grate Shafts (analytical ray-cone pass on nearby cold moonlight tiles)
+  for (int i = 0; i < ${MAX_COLD_LIGHTS}; i++) {
+    if (uColdPos[i].w > 0.5 && uColdPos[i].y > 1.5) {
+      // Slanted volumetric moonlight shaft descending onto the floor grate
+      vec3 beamBase = vec3(uColdPos[i].x, 0.0, uColdPos[i].z);
+      vec3 beamAxis = normalize(vec3(-0.24, 0.94, -0.24));
+      float accMoon = 0.0;
+      for (int s = 0; s < 6; s++) {
+        float st = mix(tStart, hitT, (float(s) + 0.5) / 6.0);
+        vec3 sp = roBase + rd * st;
+        if (sp.y > 0.05 && sp.y < 3.6) {
+          vec3 rel = sp - beamBase;
+          float hAlong = dot(rel, beamAxis);
+          float rad = length(rel - beamAxis * hAlong);
+          float coneR = mix(1.05, 0.58, clamp(sp.y / 3.6, 0.0, 1.0));
+          float radial = smoothstep(coneR, coneR * 0.15, rad);
+          float vert = smoothstep(0.0, 0.5, sp.y) * smoothstep(3.6, 1.4, sp.y);
+          accMoon += radial * vert;
+        }
+      }
+      col += vec3(0.32, 0.56, 0.92) * (accMoon / 6.0) * 0.22;
+    }
+  }
+
+  // 2. Hero Sword Slash Crescent Arc (translucent steel + torch glint!)
+  if (uHeroSwing.z > 0.01) {
+    float tPlane = (0.84 - roBase.y) / rd.y;
+    if (tPlane > tStart && tPlane < hitT + 0.35) {
+      vec3 sp = roBase + rd * tPlane;
+      vec2 rel = sp.xz - uHeroPos.xz;
+      rel = rot2(-uHeroState.x) * rel;
+      float swingSpin = (uHeroSwing.x - 0.45) * 2.2 * uHeroSwing.y;
+      rel = rot2(-swingSpin) * rel;
+      float r = length(rel);
+      float ang = atan(rel.x * uHeroSwing.y, rel.y);
+      float outerRim = smoothstep(0.84, 1.66, r) * (1.0 - smoothstep(1.68, 1.78, r));
+      float arcFade = smoothstep(-1.45, 0.65, ang) * (1.0 - smoothstep(0.85, 1.55, ang));
+      float alpha = uHeroSwing.z * outerRim * arcFade;
+      col += mix(vec3(1.1, 0.58, 0.22), vec3(1.6, 1.45, 1.15), outerRim) * alpha;
+    }
+  }
+
+  // 3. Soft Warm Torch Flame Halos (hero torch + nearby braziers/sconces)
+  {
+    vec3 oc = uHeroLightPos - roBase;
+    float proj = dot(oc, rd);
+    if (proj > 0.0 && proj < hitT + 0.8) {
+      float d = length(oc - rd * proj);
+      col += uHeroLightCol * exp(-d * d * 18.0) * 0.55;
+    }
+  }
+
+  // 4. Tight Rising Flame Embers & Combat Hit Sparks (zero screen-wide fireflies!)
+  for (int i = 0; i < ${MAX_EMBERS}; i++) {
+    if (i >= uEmberCount) break;
+    vec4 em = uEmbers[i];
+    if (em.w <= 0.01) continue;
+    vec3 oc = em.xyz - roBase;
+    float proj = dot(oc, rd);
+    if (proj > 0.0 && proj < hitT + 0.25) {
+      float d = length(oc - rd * proj);
+      if (d < 0.09) {
+        float g = smoothstep(0.075, 0.01, d) * em.w;
+        col += uEmberCols[i].rgb * g * 1.45;
+      }
+    }
+  }
+
+  // 5. Crisp Minimal Floating Health Bars (rendered in shader ONLY above hurt monsters!)
+  for (int i = 0; i < ${MAX_MOBS}; i++) {
+    if (i >= uMobCount) break;
+    float hpF = uMob1[i].w;
+    if (hpF >= 0.999 || hpF <= 0.0) continue;
+    float barY = (uMob0[i].w > 2.5) ? 2.65 : ((uMob0[i].w > 0.5 && uMob0[i].w < 1.5) ? 0.92 : 1.72);
+    vec3 bc = vec3(uMob0[i].x, barY, uMob0[i].y);
+    vec3 dBar = bc - roBase;
+    float proj = dot(dBar, rd);
+    if (proj > 0.0 && proj < hitT + 1.5) {
+      vec3 perp = dBar - rd * proj;
+      float bx = dot(perp, R);
+      float by = dot(perp, U);
+      float halfW = (uMob0[i].w > 2.5) ? 0.62 : 0.36;
+      if (abs(bx) < halfW + 0.04 && abs(by) < 0.068) {
+        if (abs(bx) < halfW && abs(by) < 0.038) {
+          float fracX = (bx + halfW) / (halfW * 2.0);
+          col = (fracX <= hpF) ? vec3(0.85, 0.16, 0.12) : vec3(0.05, 0.04, 0.06);
+        } else {
+          col = vec3(0.02, 0.025, 0.04);
+        }
+      }
+    }
+  }
+
+  // Output linear HDR scene RGB + exact linear orthographic depth in Alpha!
+  fragColor = vec4(max(col, vec3(0.0)), normDepth);
+}
+`;
+
+// Shared CoC calculation for Pass 2 & Pass 3
+const TILT_COC_GLSL = `
+float getCoC(vec2 uv) {
+  float d = texture(uScene, uv).a;
+  float depthDiff = abs(d - uFocusDepth);
+  float yDist = abs(uv.y - uFocusY);
+  // Razor-sharp horizontal focal band through the hero, growing strongly toward top & bottom
+  float bandBlur  = smoothstep(0.115, 0.43, yDist);
+  float depthBlur = smoothstep(0.032, 0.21, depthDiff);
+  float coc = clamp(bandBlur * 0.72 + depthBlur * 0.36 + bandBlur * depthBlur * 0.34, 0.0, 1.0);
+  float heroClear = 1.0 - smoothstep(0.085, 0.16, yDist);
+  coc *= mix(1.0, smoothstep(0.055, 0.18, depthDiff), heroClear);
+  return pow(clamp(coc, 0.0, 1.0), 1.10);
+}
+`;
+
+// PASS 2: Horizontal Depth-Aware Optical Tilt-Shift Blur (tight continuous step -> ZERO stripe artifacts!)
+const BLUR_H_FS = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uScene;
+uniform vec2 uLowRes;
+uniform float uFocusDepth;
+uniform float uFocusY;
+${TILT_COC_GLSL}
+
+void main() {
+  float cCoC = getCoC(vUv);
+  vec4 base = texture(uScene, vUv);
+  if (cCoC <= 0.008) {
+    fragColor = base;
+    return;
+  }
+  float stepX = (cCoC * 1.85) / uLowRes.x;
+  vec3 acc = base.rgb * 1.15;
+  float wSum = 1.15;
+  for (int i = -6; i <= 6; i++) {
+    if (i == 0) continue;
+    float fi = float(i);
+    float gauss = exp(-(fi * fi) / 14.0);
+    vec2 sUv = clamp(vUv + vec2(fi * stepX, 0.0), vec2(0.002), vec2(0.998));
+    float sCoC = getCoC(sUv);
+    float w = gauss * mix(0.25, 1.0, smoothstep(0.0, cCoC + 0.14, sCoC));
+    vec3 sCol = texture(uScene, sUv).rgb;
+    float luma = dot(sCol, vec3(0.299, 0.587, 0.114));
+    w *= 1.0 + smoothstep(0.55, 1.45, luma) * cCoC * 0.55;
+    acc += sCol * w;
+    wSum += w;
+  }
+  fragColor = vec4(acc / wSum, base.a);
+}
+`;
+
+// PASS 3: Vertical Tilt-Shift + Sharp Focal Band + Filmic sRGB + Subtle Bayer Dither + Vignette + Film Grain
+const POST_FS = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uScene;
+uniform sampler2D uBlurH;
+uniform vec2 uLowRes;
+uniform float uFocusDepth;
+uniform float uFocusY;
+uniform float uTime;
+${TILT_COC_GLSL}
+
+// Canonical 8x8 Bayer ordered dither matrix normalized to [0, 1]
+float bayer2(vec2 a) {
+  vec2 p = mod(floor(a), 2.0);
+  return fract(p.x * 0.5 + p.y * 0.75);
+}
+float bayer8(vec2 p) {
+  vec2 f = floor(p);
+  return bayer2(f) + bayer2(f * 0.5) * 0.25 + bayer2(f * 0.25) * 0.0625 + (0.5 / 64.0);
+}
+
+vec3 toneMapFilmic(vec3 x) {
+  x *= 1.05;
+  vec3 a = x * (2.51 * x + 0.03);
+  vec3 b = x * (2.43 * x + 0.59) + 0.14;
+  return clamp(a / b, 0.0, 1.0);
+}
+
+void main() {
+  // Snap sharp-band UV onto the low-res pixel grid for crafted slightly chunky pixel feel
+  vec2 snapUv = (floor(vUv * uLowRes) + 0.5) / uLowRes;
+  float centerCoC = getCoC(snapUv);
+  vec3 sharpCol = texture(uScene, snapUv).rgb;
+
+  vec3 col = sharpCol;
+  if (centerCoC > 0.01) {
+    float stepY = (centerCoC * 1.85) / uLowRes.y;
+    vec3 acc = texture(uBlurH, vUv).rgb * 1.15;
+    float wSum = 1.15;
+    for (int i = -6; i <= 6; i++) {
+      if (i == 0) continue;
+      float fi = float(i);
+      float gauss = exp(-(fi * fi) / 14.0);
+      vec2 sUv = clamp(vUv + vec2(0.0, fi * stepY), vec2(0.002), vec2(0.998));
+      float sCoC = getCoC(sUv);
+      float w = gauss * mix(0.25, 1.0, smoothstep(0.0, centerCoC + 0.14, sCoC));
+      vec3 sCol = texture(uBlurH, sUv).rgb;
+      float lumaLin = dot(sCol, vec3(0.299, 0.587, 0.114));
+      w *= 1.0 + smoothstep(0.55, 1.45, lumaLin) * centerCoC * 0.55;
+      acc += sCol * w;
+      wSum += w;
+    }
+    vec3 blurCol = acc / wSum;
+    col = mix(sharpCol, blurCol, smoothstep(0.01, 0.16, centerCoC));
+  }
+
+  // Filmic tone map + proper linear-to-sRGB so shadow shapes stay clearly readable blue-grey
+  col = toneMapFilmic(col);
+  col = pow(max(col, vec3(0.0)), vec3(1.0 / 2.2));
+
+  // Color grading: cold desaturated blue-grey shadows, warm amber firelight
+  float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
+  vec3 coolLift = vec3(0.016, 0.025, 0.044) * (1.0 - smoothstep(0.04, 0.34, luma));
+  col += coolLift;
+  vec3 shadowTint = vec3(0.86, 0.94, 1.14);
+  vec3 warmTint   = vec3(1.08, 0.96, 0.84);
+  col *= mix(shadowTint, warmTint, smoothstep(0.18, 0.62, luma));
+
+  // SUBTLE Ordered Bayer Dither across many tonal levels (fine gradient texture, NEVER screen-door!)
+  float b = bayer8(vUv * uLowRes) - 0.5;
+  float levels = 28.0;
+  float gradMask = smoothstep(0.04, 0.18, luma) * (1.0 - smoothstep(0.72, 0.98, luma) * 0.55);
+  float ditherStrength = 0.60 * gradMask;
+  vec3 dithered = floor((col + b * (ditherStrength / levels)) * levels + 0.5) / levels;
+  col = mix(col, dithered, 0.66);
+
+  // Soft vignette framing the miniature diorama
+  vec2 vc = (vUv - 0.5) * vec2(1.14, 1.02);
+  float vig = 1.0 - smoothstep(0.46, 1.08, dot(vc, vc) * 1.26);
+  col *= mix(0.52, 1.0, vig);
+
+  // Light animated monochrome film grain
+  float grainSeed = dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233)) + fract(uTime * 17.31) * 43.7;
+  float grain = fract(sin(grainSeed) * 43758.5453) - 0.5;
+  col += grain * 0.020;
+
+  fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+}
+`;
+
+// ============================================================================
+// 5. PURE WEBGL2 ALL-SHADERS RENDERER + GAME ENGINE
+// ============================================================================
+class TorchlightDepthsShaderEngine {
+  constructor() {
+    this.sound = new SoundEngine();
+    this.canvas = document.getElementById('gl-canvas');
+    const gl = this.canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, powerPreference: 'high-performance' });
+    if (!gl) throw new Error('WebGL2 is required to run Torchlight Depths');
+    this.gl = gl;
+
+    // Enable Half-Float FBOs for clean HDR torchlight before filmic tone mapping
+    this.hasHalfFloat = Boolean(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'));
+    gl.getExtension('OES_texture_float_linear');
+
+    // Compile all 3 shader programs
+    this.progRay  = this._createProgram(FULLSCREEN_VS, RAYMARCH_FS);
+    this.progBlur = this._createProgram(FULLSCREEN_VS, BLUR_H_FS);
+    this.progPost = this._createProgram(FULLSCREEN_VS, POST_FS);
+
+    this.uRay  = this._cacheUniforms(this.progRay, [
+      'uMapTex', 'uLowRes', 'uAspect', 'uCamZoom', 'uTime', 'uDepthTint',
+      'uCamTarget', 'uHeroPos', 'uHeroState', 'uHeroSwing', 'uHeroLightPos', 'uHeroLightCol',
+      'uWarmPos[0]', 'uWarmCol[0]', 'uColdPos[0]', 'uColdCol[0]',
+      'uMobCount', 'uMob0[0]', 'uMob1[0]', 'uMob2[0]',
+      'uItemCount', 'uItems[0]', 'uGibCount', 'uGibs[0]',
+      'uEmberCount', 'uEmbers[0]', 'uEmberCols[0]'
+    ]);
+    this.uBlur = this._cacheUniforms(this.progBlur, ['uScene', 'uLowRes', 'uFocusDepth', 'uFocusY']);
+    this.uPost = this._cacheUniforms(this.progPost, ['uScene', 'uBlurH', 'uLowRes', 'uFocusDepth', 'uFocusY', 'uTime']);
+
+    // Empty VAO for fullscreen triangle draw calls
+    this.vao = gl.createVertexArray();
+
+    // Create 36x36 GPU Dungeon Map Data Texture
+    this.mapTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.mapTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.mapDirty = true;
+
+    // Pre-allocated typed arrays for zero-GC uniform uploads each frame
+    this.warmPosBuf = new Float32Array(MAX_WARM_LIGHTS * 4);
+    this.warmColBuf = new Float32Array(MAX_WARM_LIGHTS * 4);
+    this.coldPosBuf = new Float32Array(MAX_COLD_LIGHTS * 4);
+    this.coldColBuf = new Float32Array(MAX_COLD_LIGHTS * 4);
+    this.mob0Buf    = new Float32Array(MAX_MOBS * 4);
+    this.mob1Buf    = new Float32Array(MAX_MOBS * 4);
+    this.mob2Buf    = new Float32Array(MAX_MOBS * 4);
+    this.itemBuf    = new Float32Array(MAX_ITEMS * 4);
+    this.gibBuf     = new Float32Array(MAX_GIBS * 4);
+    this.emberPosBuf = new Float32Array(MAX_EMBERS * 4);
+    this.emberColBuf = new Float32Array(MAX_EMBERS * 4);
+
+    // Camera basis (matches GLSL exact constants!)
+    const fLen = Math.hypot(22, 23.5, 22);
+    this.camF = [-22 / fLen, -23.5 / fLen, -22 / fLen];
+    const rLen = Math.SQRT2;
+    this.camR = [1 / rLen, 0, -1 / rLen];
+    // U = cross(R, F)
+    this.camU = [
+      this.camR[1] * this.camF[2] - this.camR[2] * this.camF[1],
+      this.camR[2] * this.camF[0] - this.camR[0] * this.camF[2],
+      this.camR[0] * this.camF[1] - this.camR[1] * this.camF[0]
+    ];
+    this.camZoom = 8.4;
+    this.camTarget = { x: 0, y: 0.55, z: 0 };
+    this.camShake = 0;
+    this.focusDepth = 0.45;
+    this.focusY = 0.50;
+
+    // Render targets
+    this.sceneFBO = null;
+    this.sceneTex = null;
+    this.blurFBO = null;
+    this.blurTex = null;
+    this.lowW = 640;
+    this.lowH = 360;
+    this.viewW = window.innerWidth;
+    this.viewH = window.innerHeight;
+    this._resize();
+
+    // Persistent Hero & Stats
+    this.stats = { hp: 12, maxHp: 12, potions: 1, gold: 0, depth: 1, slain: 0, hasKey: false };
+    this.hero = {
+      x: 0, z: 0, vx: 0, vz: 0, angle: Math.PI * 0.25, radius: 0.36,
+      walkPhase: 0, stepSide: 0,
+      swingTimer: 0, swingDuration: 0.34, swingCooldown: 0, swingHitDone: false, swingDir: 1,
+      flinchTimer: 0, invulnTimer: 0, healGlowTimer: 0, knockX: 0, knockZ: 0
+    };
+    this.heroLightPos = [0, 1.8, 0];
+    this.heroLightCol = [1.0, 0.55, 0.20];
+
+    this.dungeon = null;
+    this.monsters = [];
+    this.pickups = [];
+    this.gibs = [];
+    this.embers = Array.from({ length: MAX_EMBERS }, () => ({ x: 0, y: -99, z: 0, vx: 0, vy: 0, vz: 0, life: 0, maxLife: 1, r: 1, g: 0.55, b: 0.15 }));
+    this.lurkerTimer = 6;
+    this.transitioning = false;
+
+    this.keys = {};
+    this.controlMode = 'AUTO';
+    this.lastManualTime = -99;
+    this.ai = {
+      path: [], repathTimer: 0, targetPos: null,
+      lastCheckX: 0, lastCheckZ: 0, stuckCheckTimer: 0, stuckCount: 0,
+      nudgeAngle: 0, nudgeTimer: 0, strafeSign: 1, strafeTimer: 0
+    };
+
+    this.lastTime = performance.now();
+    this.elapsed = 0;
+    this.toastTimer = 0;
+
+    // HUD refs
+    this.elHearts = document.getElementById('hud-hearts');
+    this.elPotions = document.getElementById('val-potions');
+    this.elKey = document.getElementById('hud-key');
+    this.elGold = document.getElementById('val-gold');
+    this.elDepth = document.getElementById('val-depth');
+    this.elSlain = document.getElementById('val-slain');
+    this.elBossWrap = document.getElementById('boss-bar-wrap');
+    this.elBossFill = document.getElementById('boss-bar-fill');
+    this.elToast = document.getElementById('toast');
+    this.elCtrl = document.getElementById('ctrl-hint');
+    this.elSoundBtn = document.getElementById('sound-btn');
+    this.elSoundLabel = document.getElementById('sound-label');
+    this.elFade = document.getElementById('fade-overlay');
+
+    this._bindEvents();
+    this._loadLevel(1);
+    this._updateHUD();
+    this._loop(performance.now());
+  }
+
+  _compileShader(type, src) {
+    const gl = this.gl;
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      throw new Error('GLSL Compile Error: ' + gl.getShaderInfoLog(s));
+    }
+    return s;
+  }
+
+  _createProgram(vsSrc, fsSrc) {
+    const gl = this.gl;
+    const p = gl.createProgram();
+    const vs = this._compileShader(gl.VERTEX_SHADER, vsSrc);
+    const fs = this._compileShader(gl.FRAGMENT_SHADER, fsSrc);
+    gl.attachShader(p, vs);
+    gl.attachShader(p, fs);
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+      throw new Error('GLSL Link Error: ' + gl.getProgramInfoLog(p));
+    }
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
+    return p;
+  }
+
+  _cacheUniforms(prog, names) {
+    const gl = this.gl;
+    const map = {};
+    for (const n of names) map[n] = gl.getUniformLocation(prog, n);
+    return map;
+  }
+
+  _createFBO(w, h, linear) {
+    const gl = this.gl;
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    const intFmt = this.hasHalfFloat ? gl.RGBA16F : gl.RGBA8;
+    const type = this.hasHalfFloat ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE;
+    gl.texImage2D(gl.TEXTURE_2D, 0, intFmt, w, h, 0, gl.RGBA, type, null);
+    const filt = linear ? gl.LINEAR : gl.NEAREST;
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filt);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filt);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return { fbo, tex };
+  }
+
+  _resize() {
+    const gl = this.gl;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.viewW = Math.max(1, window.innerWidth);
+    this.viewH = Math.max(1, window.innerHeight);
+    this.canvas.width = Math.round(this.viewW * dpr);
+    this.canvas.height = Math.round(this.viewH * dpr);
+    const aspect = this.viewW / this.viewH;
+
+    // Reduced ~half-resolution raymarching target for crafted pixel look + 60 FPS lock!
+    this.lowH = clamp(Math.round(this.viewH * 0.48), 320, 460);
+    this.lowW = Math.max(320, Math.round(this.lowH * aspect));
+
+    if (this.sceneFBO) { gl.deleteFramebuffer(this.sceneFBO); gl.deleteTexture(this.sceneTex); }
+    if (this.blurFBO)  { gl.deleteFramebuffer(this.blurFBO);  gl.deleteTexture(this.blurTex); }
+
+    const s = this._createFBO(this.lowW, this.lowH, false);
+    this.sceneFBO = s.fbo; this.sceneTex = s.tex;
+    const b = this._createFBO(this.lowW, this.lowH, true);
+    this.blurFBO = b.fbo; this.blurTex = b.tex;
+  }
+
+  _bindEvents() {
+    window.addEventListener('resize', () => this._resize());
+    const markManual = () => {
+      this.controlMode = 'MANUAL';
+      this.lastManualTime = this.elapsed;
+      this._syncCtrlHint();
+    };
+    window.addEventListener('keydown', (e) => {
+      if (['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) {
+        e.preventDefault();
+        this.keys[e.code] = true;
+        markManual();
+      }
+    });
+    window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
+    this.elSoundBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const on = this.sound.toggle();
+      this.elSoundBtn.classList.toggle('enabled', on);
+      this.elSoundLabel.textContent = on ? 'SOUND ON' : 'SOUND OFF';
+    });
+  }
+
+  _syncCtrlHint() {
+    if (this.controlMode === 'MANUAL') {
+      this.elCtrl.textContent = 'MANUAL CONTROL · WASD / ARROWS + SPACE';
+      this.elCtrl.classList.add('manual');
+    } else {
+      this.elCtrl.textContent = 'AUTO-PLAY · WASD / ARROWS + SPACE TO TAKE OVER';
+      this.elCtrl.classList.remove('manual');
+    }
+  }
+
+  _showToast(text, duration = 3.0) {
+    this.elToast.textContent = text;
+    this.elToast.classList.add('show');
+    this.toastTimer = duration;
+  }
+
+  _loadLevel(depth) {
+    this.stats.depth = depth;
+    this.stats.hasKey = false;
+    this.monsters = [];
+    this.pickups = [];
+    this.gibs = [];
+    for (const em of this.embers) { em.life = 0; em.y = -99; }
+    this.elBossWrap.classList.remove('visible');
+
+    this.dungeon = generateDungeon(depth);
+    this.mapDirty = true;
+
+    for (const ms of this.dungeon.monsterSpawns) {
+      this._spawnMonster(ms.type, ms.x, ms.z, ms.roomId);
+    }
+
+    this.hero.x = this.dungeon.heroStart.x;
+    this.hero.z = this.dungeon.heroStart.z;
+    this.hero.vx = 0; this.hero.vz = 0;
+    this.hero.angle = Math.PI * 0.25;
+    this.hero.swingTimer = 0;
+    this.hero.invulnTimer = 0.8;
+
+    this.camTarget.x = this.hero.x;
+    this.camTarget.z = this.hero.z;
+
+    this.ai.path = [];
+    this.ai.repathTimer = 0;
+    this.ai.stuckCount = 0;
+    this.ai.lastCheckX = this.hero.x;
+    this.ai.lastCheckZ = this.hero.z;
+    this.lurkerTimer = 7.0;
+
+    const title = DEPTH_TITLES[(depth - 1) % DEPTH_TITLES.length];
+    this._showToast(`DEPTH ${depth} — ${title}`, 3.4);
+    this._updateHUD();
+  }
+
+  _spawnMonster(type, x, z, roomId) {
+    const ds = 1 + (this.stats.depth - 1) * 0.14;
+    const cfg = {
+      rat:      { code: 1, hp: Math.round(16 * ds), speed: 3.15, radius: 0.34, reach: 1.15, dmg: 1, cd: 1.05, gold: [4, 9] },
+      slime:    { code: 2, hp: Math.round(24 * ds), speed: 1.95, radius: 0.44, reach: 1.25, dmg: 1, cd: 1.25, gold: [6, 12] },
+      skeleton: { code: 0, hp: Math.round(28 * ds), speed: 2.35, radius: 0.38, reach: 1.48, dmg: 1, cd: 1.15, gold: [8, 16] },
+      boss:     { code: 3, hp: Math.round(115 * ds), speed: 2.10, radius: 0.62, reach: 2.05, dmg: 2, cd: 1.35, gold: [55, 85] }
+    }[type];
+    const m = {
+      type, code: cfg.code, x, z, vx: 0, vz: 0, angle: rand(0, 6.28),
+      hp: cfg.hp, maxHp: cfg.hp, speed: cfg.speed, radius: cfg.radius, reach: cfg.reach,
+      dmg: cfg.dmg, atkCd: rand(0.2, 0.7), atkBaseCd: cfg.cd, windup: 0, swingAnim: 0,
+      flashTimer: 0, knockX: 0, knockZ: 0, alerted: false, roomId,
+      walkPhase: rand(0, 6.28), homeX: x, homeZ: z, wanderTimer: rand(0.5, 2.5),
+      wanderAngle: rand(0, 6.28), goldRange: cfg.gold, dead: false
+    };
+    this.monsters.push(m);
+    return m;
+  }
+
+  _spawnPickup(kind, x, z, value = 5) {
+    this.pickups.push({
+      kind, code: kind === 'gold' ? 1 : 2, x, z, value,
+      vx: rand(-1.8, 1.8), vy: rand(2.4, 3.8), vz: rand(-1.8, 1.8), y: 0.35, age: 0
+    });
+  }
+
+  _spawnEmber(x, y, z, r = 1.0, g = 0.52, b = 0.14, burst = false) {
+    let slot = -1;
+    for (let i = 0; i < MAX_EMBERS; i++) if (this.embers[i].life <= 0) { slot = i; break; }
+    if (slot === -1) slot = randInt(0, MAX_EMBERS - 1);
+    const e = this.embers[slot];
+    e.x = x + rand(-0.07, 0.07);
+    e.y = y;
+    e.z = z + rand(-0.07, 0.07);
+    e.life = burst ? rand(0.22, 0.48) : rand(0.28, 0.62);
+    e.maxLife = e.life;
+    e.vx = burst ? rand(-2.1, 2.1) : rand(-0.14, 0.14);
+    e.vy = burst ? rand(1.1, 3.2) : rand(0.65, 1.2);
+    e.vz = burst ? rand(-2.1, 2.1) : rand(-0.14, 0.14);
+    e.r = r; e.g = g; e.b = b;
+  }
+
+  _spawnDeathBurst(m) {
+    const isBoss = m.type === 'boss';
+    const count = isBoss ? 12 : (m.type === 'slime' ? 9 : 7);
+    const kind = (m.type === 'skeleton' || isBoss) ? 0 : (m.type === 'slime' ? 1 : 2);
+    for (let i = 0; i < count; i++) {
+      if (this.gibs.length >= MAX_GIBS) this.gibs.shift();
+      this.gibs.push({
+        x: m.x + rand(-0.2, 0.2), y: rand(0.3, 0.85), z: m.z + rand(-0.2, 0.2),
+        vx: rand(-3.2, 3.2), vy: rand(2.0, isBoss ? 5.6 : 4.2), vz: rand(-3.2, 3.2),
+        kind, scale: rand(0.65, 0.98), life: rand(5.5, 9.0)
+      });
+    }
+    for (let i = 0; i < (isBoss ? 14 : 6); i++) {
+      if (m.type === 'slime') this._spawnEmber(m.x, 0.55, m.z, 0.52, 0.90, 0.30, true);
+      else if (isBoss) this._spawnEmber(m.x, 0.85, m.z, 1.0, 0.35, 0.15, true);
+      else this._spawnEmber(m.x, 0.55, m.z, 0.95, 0.82, 0.62, true);
+    }
+  }
+
+  // Solid collision resolution (nothing passes through walls, pillars or monsters!)
+  _resolveStaticCollision(entity) {
+    const d = this.dungeon;
+    const r = entity.radius, half = TILE * 0.5;
+    for (let pass = 0; pass < 3; pass++) {
+      const cgx = Math.round(entity.x / TILE), cgz = Math.round(entity.z / TILE);
+      for (let gz = cgz - 1; gz <= cgz + 1; gz++) {
+        for (let gx = cgx - 1; gx <= cgx + 1; gx++) {
+          if (gx < 0 || gz < 0 || gx >= GRID_W || gz >= GRID_H) continue;
+          const cell = d.grid[gz][gx];
+          let solid = (cell === CELL_VOID || cell === CELL_WALL || cell === CELL_CELL_BARS);
+          if (cell === CELL_DOOR || cell === CELL_LOCKED_DOOR) {
+            const dr = d.doors.find(o => o.gx === gx && o.gz === gz);
+            if (dr && dr.openAmount < 0.72) solid = true;
+          }
+          if (!solid) continue;
+          const minX = gx * TILE - half, maxX = gx * TILE + half;
+          const minZ = gz * TILE - half, maxZ = gz * TILE + half;
+          const cx = clamp(entity.x, minX, maxX), cz = clamp(entity.z, minZ, maxZ);
+          const dx = entity.x - cx, dz = entity.z - cz, dSq = dx * dx + dz * dz;
+          if (dSq < r * r) {
+            const dist = Math.sqrt(dSq);
+            if (dist > 0.0001) { entity.x += (dx / dist) * (r - dist); entity.z += (dz / dist) * (r - dist); }
+            else {
+              const ox = Math.min(Math.abs(entity.x - minX), Math.abs(maxX - entity.x));
+              const oz = Math.min(Math.abs(entity.z - minZ), Math.abs(maxZ - entity.z));
+              if (ox < oz) entity.x += (entity.x < gx * TILE ? -1 : 1) * (ox + r);
+              else entity.z += (entity.z < gz * TILE ? -1 : 1) * (oz + r);
+            }
+          }
+        }
+      }
+      for (const c of d.solidColliders) {
+        const dx = entity.x - c.x, dz = entity.z - c.z, minD = r + c.r, dSq = dx * dx + dz * dz;
+        if (dSq < minD * minD && dSq > 1e-6) {
+          const dist = Math.sqrt(dSq);
+          entity.x += (dx / dist) * (minD - dist);
+          entity.z += (dz / dist) * (minD - dist);
+        }
+      }
+    }
+  }
+
+  _resolveActorSeparation() {
+    const alive = this.monsters.filter(m => !m.dead);
+    for (const m of alive) {
+      const dx = m.x - this.hero.x, dz = m.z - this.hero.z;
+      const minD = this.hero.radius + m.radius + 0.06, dSq = dx * dx + dz * dz;
+      if (dSq < minD * minD && dSq > 1e-6) {
+        const dist = Math.sqrt(dSq), ov = minD - dist, nx = dx / dist, nz = dz / dist;
+        const hs = m.type === 'boss' ? 0.55 : 0.35;
+        this.hero.x -= nx * ov * hs; this.hero.z -= nz * ov * hs;
+        m.x += nx * ov * (1 - hs); m.z += nz * ov * (1 - hs);
+      }
+    }
+    for (let i = 0; i < alive.length; i++) {
+      for (let j = i + 1; j < alive.length; j++) {
+        const a = alive[i], b = alive[j], dx = b.x - a.x, dz = b.z - a.z;
+        const minD = a.radius + b.radius + 0.05, dSq = dx * dx + dz * dz;
+        if (dSq < minD * minD && dSq > 1e-6) {
+          const dist = Math.sqrt(dSq), p = (minD - dist) * 0.5, nx = dx / dist, nz = dz / dist;
+          a.x -= nx * p; a.z -= nz * p; b.x += nx * p; b.z += nz * p;
+        }
+      }
+    }
+    this._resolveStaticCollision(this.hero);
+    for (const m of alive) this._resolveStaticCollision(m);
+  }
+
+  _triggerHeroSwing() {
+    if (this.hero.swingTimer > 0 || this.hero.swingCooldown > 0) return;
+    this.hero.swingTimer = this.hero.swingDuration;
+    this.hero.swingCooldown = 0.42;
+    this.hero.swingHitDone = false;
+    this.hero.swingDir *= -1;
+    this.sound.playSwordSwing();
+  }
+
+  _drinkPotion() {
+    if (this.stats.potions <= 0 || this.stats.hp >= this.stats.maxHp) return;
+    this.stats.potions--;
+    this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + 6);
+    this.hero.healGlowTimer = 0.85;
+    this.sound.playPotion();
+    for (let i = 0; i < 8; i++) this._spawnEmber(this.hero.x + rand(-0.3, 0.3), 0.7, this.hero.z + rand(-0.3, 0.3), 1.0, 0.28, 0.36, true);
+    this._updateHUD();
+  }
+
+  _damageHero(dmg, fromX, fromZ) {
+    if (this.hero.invulnTimer > 0 || this.transitioning) return;
+    this.stats.hp = Math.max(0, this.stats.hp - dmg);
+    this.hero.flinchTimer = 0.24;
+    this.hero.invulnTimer = 0.62;
+    this.camShake = Math.max(this.camShake, 0.16);
+    const dx = this.hero.x - fromX, dz = this.hero.z - fromZ, len = Math.hypot(dx, dz) || 1;
+    this.hero.knockX += (dx / len) * 5.2; this.hero.knockZ += (dz / len) * 5.2;
+    this.sound.playHeroHurt();
+
+    if (this.stats.hp > 0 && this.stats.hp <= 5 && this.stats.potions > 0 && this.controlMode === 'AUTO') {
+      this._drinkPotion();
+    }
+    if (this.stats.hp <= 0) {
+      this.stats.hp = this.stats.maxHp;
+      this.hero.invulnTimer = 1.6;
+      this.hero.healGlowTimer = 1.0;
+      this._showToast('TORCHLIGHT REKINDLED — SECOND WIND!', 2.4);
+      for (let i = 0; i < 12; i++) this._spawnEmber(this.hero.x, 0.8, this.hero.z, 1.0, 0.65, 0.25, true);
+      for (const m of this.monsters) {
+        if (m.dead) continue;
+        const dist = Math.hypot(m.x - this.hero.x, m.z - this.hero.z);
+        if (dist < 4.5 && dist > 0.01) {
+          m.knockX += ((m.x - this.hero.x) / dist) * 8.0;
+          m.knockZ += ((m.z - this.hero.z) / dist) * 8.0;
+        }
+      }
+    }
+    this._updateHUD();
+  }
+
+  _resolveHeroSwordHit() {
+    const reach = 2.08;
+    const fx = Math.sin(this.hero.angle), fz = Math.cos(this.hero.angle);
+    const baseDmg = 10 + Math.floor((this.stats.depth - 1) * 1.6);
+    for (const m of this.monsters) {
+      if (m.dead) continue;
+      const dx = m.x - this.hero.x, dz = m.z - this.hero.z, dist = Math.hypot(dx, dz);
+      if (dist > reach + m.radius) continue;
+      const dot = (dx * fx + dz * fz) / (dist || 1);
+      if (dot < 0.15 && dist > 0.95) continue;
+
+      m.hp -= baseDmg;
+      m.flashTimer = 0.16;
+      m.alerted = true;
+      const push = m.type === 'boss' ? 3.2 : 6.8;
+      m.knockX += (dx / (dist || 1)) * push;
+      m.knockZ += (dz / (dist || 1)) * push;
+
+      for (let i = 0; i < 5; i++) {
+        if (m.type === 'slime') this._spawnEmber((this.hero.x + m.x) * 0.5, 0.8, (this.hero.z + m.z) * 0.5, 0.55, 0.95, 0.35, true);
+        else this._spawnEmber((this.hero.x + m.x) * 0.5, 0.85, (this.hero.z + m.z) * 0.5, 1.0, 0.80, 0.42, true);
+      }
+
+      if (m.hp <= 0) {
+        m.dead = true;
+        this.stats.slain++;
+        this.sound.playHit(m.type, true);
+        this.sound.playMonsterCry(m.type, true);
+        this._spawnDeathBurst(m);
+        this.camShake = Math.max(this.camShake, m.type === 'boss' ? 0.34 : 0.14);
+
+        const coinDrops = m.type === 'boss' ? 5 : randInt(1, 2);
+        const totalGold = randInt(m.goldRange[0], m.goldRange[1]);
+        for (let c = 0; c < coinDrops; c++) this._spawnPickup('gold', m.x, m.z, Math.max(2, Math.round(totalGold / coinDrops)));
+        if (m.type === 'boss' || (this.stats.hp <= 8 && this.stats.potions < 2 && Math.random() < 0.35)) {
+          this._spawnPickup('potion', m.x, m.z, 1);
+        }
+        if (m.type === 'boss') {
+          this._showToast('THE BONE WARDEN FALLS! KEY DROPPED!', 2.6);
+          this.elBossWrap.classList.remove('visible');
+          if (this.dungeon.keyItem.guardedByBoss && !this.dungeon.keyItem.collected) {
+            this.dungeon.keyItem.guardedByBoss = false;
+            this.dungeon.keyItem.x = m.x; this.dungeon.keyItem.z = m.z;
+            const ks = this.dungeon.warmSources.find(s => s.isKey);
+            if (ks) { ks.x = m.x; ks.z = m.z; }
+          }
+        }
+        this._updateHUD();
+      } else {
+        this.sound.playHit(m.type, false);
+        if (Math.random() < 0.38) this.sound.playMonsterCry(m.type, false);
+        this.camShake = Math.max(this.camShake, 0.08);
+      }
+    }
+  }
+
+  _pollManualInput() {
+    let sx = 0, sy = 0, attack = false;
+    if (this.keys.KeyW || this.keys.ArrowUp) sy -= 1;
+    if (this.keys.KeyS || this.keys.ArrowDown) sy += 1;
+    if (this.keys.KeyA || this.keys.ArrowLeft) sx -= 1;
+    if (this.keys.KeyD || this.keys.ArrowRight) sx += 1;
+    if (this.keys.Space) attack = true;
+
+    if (navigator.getGamepads) {
+      for (const pad of navigator.getGamepads()) {
+        if (!pad) continue;
+        const ax = pad.axes[0] || 0, ay = pad.axes[1] || 0;
+        if (Math.hypot(ax, ay) > 0.22) {
+          sx += ax; sy += ay;
+          this.controlMode = 'MANUAL'; this.lastManualTime = this.elapsed; this._syncCtrlHint();
+        }
+        if (pad.buttons[0]?.pressed || pad.buttons[2]?.pressed || pad.buttons[5]?.pressed || pad.buttons[7]?.pressed) {
+          attack = true; this.controlMode = 'MANUAL'; this.lastManualTime = this.elapsed; this._syncCtrlHint();
+        }
+        if (pad.buttons[1]?.pressed || pad.buttons[3]?.pressed) this._drinkPotion();
+      }
+    }
+
+    let mx = 0, mz = 0;
+    if (sx !== 0 || sy !== 0 || attack) {
+      this.lastManualTime = this.elapsed;
+      if (sx !== 0 || sy !== 0) {
+        const len = Math.hypot(sx, sy) || 1, nx = sx / len, ny = sy / len;
+        mx = (nx + ny) * 0.7071;
+        mz = (-nx + ny) * 0.7071;
+      }
+    }
+    if (this.controlMode === 'MANUAL' && (this.elapsed - this.lastManualTime > 4.0)) {
+      this.controlMode = 'AUTO';
+      this.ai.path = []; this.ai.repathTimer = 0;
+      this._syncCtrlHint();
+    }
+    return { mx, mz, attack };
+  }
+
+  _computeAutoAI(dt) {
+    const d = this.dungeon, h = this.hero;
+    const cgx = clamp(Math.round(h.x / TILE), 0, GRID_W - 1), cgz = clamp(Math.round(h.z / TILE), 0, GRID_H - 1);
+    const curRoom = d.roomMap[cgz][cgx];
+    if (curRoom >= 0) d.rooms[curRoom].visited = true;
+
+    if (this.stats.hp <= 6 && this.stats.potions > 0) this._drinkPotion();
+
+    let nearestThreat = null, nearestDist = Infinity;
+    for (const m of this.monsters) {
+      if (m.dead) continue;
+      if (!this.stats.hasKey && m.roomId === d.exitRoomId) continue;
+      const dist = Math.hypot(m.x - h.x, m.z - h.z);
+      if (dist < nearestDist) { nearestDist = dist; nearestThreat = m; }
+    }
+
+    if (nearestThreat && nearestDist < 8.6) {
+      const dx = nearestThreat.x - h.x, dz = nearestThreat.z - h.z;
+      const strikeDist = nearestThreat.radius + 1.48;
+      if (nearestDist <= strikeDist) {
+        h.angle += angleDiff(h.angle, Math.atan2(dx, dz)) * Math.min(1, dt * 16);
+        this._triggerHeroSwing();
+        this.ai.strafeTimer -= dt;
+        if (this.ai.strafeTimer <= 0) { this.ai.strafeTimer = rand(0.45, 1.0); this.ai.strafeSign = Math.random() < 0.5 ? 1 : -1; }
+        const perpX = -dz / (nearestDist || 1), perpZ = dx / (nearestDist || 1);
+        const keep = nearestDist < (nearestThreat.radius + 0.72) ? -0.55 : 0.15;
+        return { mx: (dx / (nearestDist || 1)) * keep + perpX * 0.42 * this.ai.strafeSign, mz: (dz / (nearestDist || 1)) * keep + perpZ * 0.42 * this.ai.strafeSign, attack: false };
+      }
+      this.ai.repathTimer -= dt;
+      if (this.ai.repathTimer <= 0 || this.ai.path.length === 0) {
+        this.ai.path = findPath(d, h.x, h.z, nearestThreat.x, nearestThreat.z, this.stats.hasKey);
+        this.ai.repathTimer = 0.25;
+      }
+      return this._followPath(dt, nearestThreat.x, nearestThreat.z);
+    }
+
+    let nearP = null, nearPD = 5.5;
+    for (const p of this.pickups) { const dist = Math.hypot(p.x - h.x, p.z - h.z); if (dist < nearPD) { nearPD = dist; nearP = p; } }
+    if (nearP) return this._steerDirectOrPath(dt, nearP.x, nearP.z);
+
+    let nearC = null, nearCD = 7.5;
+    for (const ch of d.chests) {
+      if (ch.opened || (!this.stats.hasKey && ch.roomId === d.exitRoomId)) continue;
+      const dist = Math.hypot(ch.x - h.x, ch.z - h.z);
+      if (dist < nearCD) { nearCD = dist; nearC = ch; }
+    }
+    if (nearC) return this._steerDirectOrPath(dt, nearC.x, nearC.z);
+
+    let goalX = null, goalZ = null;
+    const unvisited = d.rooms.filter(r => !r.visited && r.id !== d.exitRoomId);
+    const unopened = d.chests.filter(c => !c.opened && (this.stats.hasKey || c.roomId !== d.exitRoomId));
+
+    if (!this.stats.hasKey) {
+      if (unvisited.length > 0) {
+        unvisited.sort((a, b) => Math.hypot(a.cx * TILE - h.x, a.cz * TILE - h.z) - Math.hypot(b.cx * TILE - h.x, b.cz * TILE - h.z));
+        goalX = unvisited[0].cx * TILE; goalZ = unvisited[0].cz * TILE;
+      } else if (!d.keyItem.collected) {
+        if (d.keyItem.guardedByBoss) {
+          const boss = this.monsters.find(m => !m.dead && m.type === 'boss');
+          goalX = boss ? boss.x : d.keyItem.x; goalZ = boss ? boss.z : d.keyItem.z;
+        } else { goalX = d.keyItem.x; goalZ = d.keyItem.z; }
+      }
+    } else {
+      if (unvisited.length > 0 && unvisited.length <= 2) {
+        unvisited.sort((a, b) => Math.hypot(a.cx * TILE - h.x, a.cz * TILE - h.z) - Math.hypot(b.cx * TILE - h.x, b.cz * TILE - h.z));
+        goalX = unvisited[0].cx * TILE; goalZ = unvisited[0].cz * TILE;
+      } else if (unopened.length > 0 && Math.hypot(unopened[0].x - h.x, unopened[0].z - h.z) < 12) {
+        goalX = unopened[0].x; goalZ = unopened[0].z;
+      } else {
+        goalX = d.stairsTile.gx * TILE; goalZ = d.stairsTile.gz * TILE;
+      }
+    }
+    if (goalX === null) {
+      goalX = this.stats.hasKey ? d.stairsTile.gx * TILE : d.keyItem.x;
+      goalZ = this.stats.hasKey ? d.stairsTile.gz * TILE : d.keyItem.z;
+    }
+    if (!d.keyItem.collected && !d.keyItem.guardedByBoss && Math.hypot(d.keyItem.x - h.x, d.keyItem.z - h.z) < 7.0) {
+      goalX = d.keyItem.x; goalZ = d.keyItem.z;
+    }
+    return this._steerDirectOrPath(dt, goalX, goalZ);
+  }
+
+  _steerDirectOrPath(dt, tx, tz) {
+    this.ai.repathTimer -= dt;
+    const changed = !this.ai.targetPos || Math.hypot(this.ai.targetPos.x - tx, this.ai.targetPos.z - tz) > 1.2;
+    if (this.ai.repathTimer <= 0 || this.ai.path.length === 0 || changed) {
+      this.ai.targetPos = { x: tx, z: tz };
+      this.ai.path = findPath(this.dungeon, this.hero.x, this.hero.z, tx, tz, this.stats.hasKey);
+      this.ai.repathTimer = 0.42;
+    }
+    return this._followPath(dt, tx, tz);
+  }
+
+  _followPath(dt, fx, fz) {
+    const h = this.hero;
+    if (this.ai.nudgeTimer > 0) {
+      this.ai.nudgeTimer -= dt;
+      return { mx: Math.cos(this.ai.nudgeAngle), mz: Math.sin(this.ai.nudgeAngle), attack: false };
+    }
+    while (this.ai.path.length > 0 && Math.hypot(this.ai.path[0].x - h.x, this.ai.path[0].z - h.z) < 0.58) {
+      this.ai.path.shift();
+    }
+    const tgt = this.ai.path.length > 0 ? this.ai.path[0] : { x: fx, z: fz };
+    const dx = tgt.x - h.x, dz = tgt.z - h.z, dist = Math.hypot(dx, dz);
+    if (dist < 0.12) return { mx: 0, mz: 0, attack: false };
+    let mx = dx / dist, mz = dz / dist;
+    for (const tr of this.dungeon.traps) {
+      if (tr.type === 'spikes' && tr.active) {
+        if (Math.hypot(tr.x - (h.x + mx * 0.95), tr.z - (h.z + mz * 0.95)) < 0.85 && Math.hypot(tr.x - h.x, tr.z - h.z) > 0.95) {
+          mx *= 0.12; mz *= 0.12;
+        }
+      }
+    }
+    return { mx, mz, attack: false };
+  }
+
+  _updateStuckWatchdog(dt) {
+    if (this.controlMode !== 'AUTO' || this.transitioning || this.hero.swingTimer > 0) return;
+    this.ai.stuckCheckTimer += dt;
+    if (this.ai.stuckCheckTimer >= 0.65) {
+      const moved = Math.hypot(this.hero.x - this.ai.lastCheckX, this.hero.z - this.ai.lastCheckZ);
+      this.ai.lastCheckX = this.hero.x; this.ai.lastCheckZ = this.hero.z;
+      this.ai.stuckCheckTimer = 0;
+      if (moved < 0.24) {
+        this.ai.stuckCount++;
+        for (const dr of this.dungeon.doors) {
+          if (!dr.locked && Math.hypot(dr.gx * TILE - this.hero.x, dr.gz * TILE - this.hero.z) < 2.6) {
+            dr.open = true; dr.openAmount = 1;
+            const idx = (dr.gz * GRID_W + dr.gx) * 4;
+            this.dungeon.mapData[idx + 2] = 255;
+            this.mapDirty = true;
+          }
+        }
+        this.ai.nudgeAngle = this.hero.angle + (this.ai.stuckCount % 2 === 0 ? Math.PI * 0.65 : -Math.PI * 0.65);
+        this.ai.nudgeTimer = 0.28;
+        this.ai.path = []; this.ai.repathTimer = 0;
+        if (this.ai.stuckCount >= 4) {
+          const gx = clamp(Math.round(this.hero.x / TILE), 1, GRID_W - 2), gz = clamp(Math.round(this.hero.z / TILE), 1, GRID_H - 2);
+          if (this.dungeon.grid[gz][gx] === CELL_FLOOR) {
+            this.hero.x = lerp(this.hero.x, gx * TILE, 0.35);
+            this.hero.z = lerp(this.hero.z, gz * TILE, 0.35);
+          }
+          this.ai.stuckCount = 0;
+        }
+      } else this.ai.stuckCount = 0;
+    }
+  }
+
+  _update(dt) {
+    this.elapsed += dt;
+    const t = this.elapsed;
+    if (this.toastTimer > 0) {
+      this.toastTimer -= dt;
+      if (this.toastTimer <= 0) this.elToast.classList.remove('show');
+    }
+
+    const d = this.dungeon, h = this.hero;
+    const manual = this._pollManualInput();
+    let moveX = 0, moveZ = 0, wantAttack = false;
+    if (!this.transitioning) {
+      if (this.controlMode === 'MANUAL') { moveX = manual.mx; moveZ = manual.mz; wantAttack = manual.attack; }
+      else { const a = this._computeAutoAI(dt); moveX = a.mx; moveZ = a.mz; wantAttack = a.attack; }
+    }
+    if (wantAttack) this._triggerHeroSwing();
+
+    // Hero movement
+    const speed = h.swingTimer > 0 ? 1.85 : 3.95;
+    const mag = Math.hypot(moveX, moveZ);
+    if (mag > 0.05) {
+      const nx = moveX / Math.max(1, mag), nz = moveZ / Math.max(1, mag);
+      h.vx = lerp(h.vx, nx * speed, Math.min(1, dt * 13));
+      h.vz = lerp(h.vz, nz * speed, Math.min(1, dt * 13));
+      if (h.swingTimer <= 0) h.angle += angleDiff(h.angle, Math.atan2(nx, nz)) * Math.min(1, dt * 14);
+    } else {
+      h.vx = lerp(h.vx, 0, Math.min(1, dt * 14));
+      h.vz = lerp(h.vz, 0, Math.min(1, dt * 14));
+    }
+    h.knockX *= Math.exp(-dt * 11); h.knockZ *= Math.exp(-dt * 11);
+    h.x += (h.vx + h.knockX) * dt; h.z += (h.vz + h.knockZ) * dt;
+    this._resolveStaticCollision(h);
+
+    if (h.swingCooldown > 0) h.swingCooldown -= dt;
+    if (h.invulnTimer > 0) h.invulnTimer -= dt;
+    if (h.flinchTimer > 0) h.flinchTimer = Math.max(0, h.flinchTimer - dt);
+    if (h.healGlowTimer > 0) h.healGlowTimer = Math.max(0, h.healGlowTimer - dt);
+
+    if (h.swingTimer > 0) {
+      h.swingTimer = Math.max(0, h.swingTimer - dt);
+      const p = 1 - h.swingTimer / h.swingDuration;
+      if (p >= 0.32 && !h.swingHitDone) { h.swingHitDone = true; this._resolveHeroSwordHit(); }
+    }
+
+    // Walk cycle & footsteps (with damp splash in puddles!)
+    const speedMag = Math.hypot(h.vx, h.vz);
+    const movingFrac = clamp(speedMag / 3.8, 0, 1);
+    if (movingFrac > 0.1) {
+      h.walkPhase += dt * (7.2 + movingFrac * 4.4);
+      const sSign = Math.sin(h.walkPhase) >= 0 ? 1 : -1;
+      if (sSign !== h.stepSide) {
+        h.stepSide = sSign;
+        const gx = clamp(Math.round(h.x / TILE), 0, GRID_W - 1), gz = clamp(Math.round(h.z / TILE), 0, GRID_H - 1);
+        const inPuddle = (d.mapData[(gz * GRID_W + gx) * 4 + 3] & 1) !== 0;
+        this.sound.playFootstep(inPuddle);
+      }
+    } else h.walkPhase += dt * 1.8;
+
+    // Flickering hero torch world position (exact match to GLSL SDF hero left-hand torch!)
+    const flick = Math.sin(t * 14.3) * 0.35 + Math.sin(t * 23.7 + 1.2) * 0.25 + Math.cos(t * 37.1 + 0.5) * 0.15 + Math.sin(t * 7.1) * 0.25;
+    const bob = Math.abs(Math.cos(h.walkPhase)) * 0.08 * movingFrac;
+    const ca = Math.cos(h.angle), sa = Math.sin(h.angle);
+    const lx = -0.34, lz = 0.36;
+    const wx = h.x + lx * ca + lz * sa;
+    const wz = h.z - lx * sa + lz * ca;
+    const wy = 1.66 + bob + Math.sin(h.walkPhase) * 0.07 * movingFrac;
+    this.heroLightPos[0] = wx + Math.sin(t * 19.3) * 0.045;
+    this.heroLightPos[1] = wy + Math.cos(t * 15.7) * 0.035;
+    this.heroLightPos[2] = wz + Math.cos(t * 21.1) * 0.045;
+    const flMul = 1.0 + flick * 0.15;
+    this.heroLightCol[0] = 1.0 * flMul;
+    this.heroLightCol[1] = clamp(0.46 + flick * 0.05, 0.38, 0.58) * flMul;
+    this.heroLightCol[2] = clamp(0.14 + flick * 0.03, 0.10, 0.22) * flMul;
+
+    if (Math.random() < dt * 10) this._spawnEmber(wx, wy - 0.08, wz, 1.0, 0.62, 0.20, false);
+
+    // Doors (sync swinging animation into GPU map texture B channel!)
+    for (const dr of d.doors) {
+      const dx = dr.gx * TILE, dz = dr.gz * TILE;
+      if (!dr.open && Math.hypot(dx - h.x, dz - h.z) < 2.25) {
+        if (!dr.locked) { dr.open = true; this.sound.playDoorOpen(); }
+        else if (this.stats.hasKey) {
+          dr.locked = false; dr.open = true;
+          const idx = (dr.gz * GRID_W + dr.gx) * 4;
+          d.mapData[idx] = dr.horiz ? G_DOOR_H : G_DOOR_V;
+          this.mapDirty = true;
+          this.sound.playDoorUnlock();
+          this._showToast('EXIT DOOR UNLOCKED!', 2.2);
+          for (let i = 0; i < 10; i++) this._spawnEmber(dx, 1.1, dz, 1.0, 0.82, 0.36, true);
+        }
+      }
+      if (!dr.open && !dr.locked) {
+        for (const m of this.monsters) if (!m.dead && Math.hypot(dx - m.x, dz - m.z) < 1.85) { dr.open = true; break; }
+      }
+      const prevByte = Math.round(dr.openAmount * 255);
+      dr.openAmount = lerp(dr.openAmount, dr.open ? 1 : 0, Math.min(1, dt * 6.5));
+      const newByte = Math.round(dr.openAmount * 255);
+      if (newByte !== prevByte) {
+        d.mapData[(dr.gz * GRID_W + dr.gx) * 4 + 2] = newByte;
+        this.mapDirty = true;
+      }
+    }
+
+    // Treasure Chests (sync animated lid into GPU map texture!)
+    for (const ch of d.chests) {
+      if (!ch.opened && Math.hypot(ch.x - h.x, ch.z - h.z) < 1.55) {
+        ch.opened = true;
+        this.sound.playChest();
+        const goldAmt = randInt(16, 32) + this.stats.depth * 4;
+        this.stats.gold += goldAmt;
+        const gotPotion = this.stats.potions < 3 && (this.stats.hp < this.stats.maxHp || Math.random() < 0.65);
+        if (gotPotion) this.stats.potions++;
+        for (let i = 0; i < 9; i++) {
+          if (gotPotion && i % 3 === 0) this._spawnEmber(ch.x, 0.65, ch.z, 1.0, 0.28, 0.36, true);
+          else this._spawnEmber(ch.x, 0.65, ch.z, 1.0, 0.85, 0.36, true);
+        }
+        this._showToast(gotPotion ? `CHEST: +${goldAmt} GOLD & HEALTH POTION` : `CHEST: +${goldAmt} GOLD`, 1.8);
+        this._updateHUD();
+      }
+      if (ch.opened && ch.openAnim < 1) {
+        ch.openAnim = Math.min(1, ch.openAnim + dt * 5.0);
+        d.mapData[(ch.gz * GRID_W + ch.gx) * 4 + 2] = Math.round(ch.openAnim * 255);
+        this.mapDirty = true;
+      }
+    }
+
+    // Golden Key pickup
+    if (!d.keyItem.collected && !d.keyItem.guardedByBoss) {
+      if (Math.hypot(d.keyItem.x - h.x, d.keyItem.z - h.z) < 1.15) {
+        d.keyItem.collected = true;
+        this.stats.hasKey = true;
+        this.sound.playKey();
+        this._showToast('FOUND THE GOLDEN DUNGEON KEY!', 2.6);
+        for (let i = 0; i < 10; i++) this._spawnEmber(d.keyItem.x, 0.75, d.keyItem.z, 1.0, 0.86, 0.40, true);
+        this.ai.path = [];
+        this._updateHUD();
+      }
+    }
+
+    // Loose Pickups
+    for (let i = this.pickups.length - 1; i >= 0; i--) {
+      const p = this.pickups[i];
+      p.age += dt;
+      p.vy -= 14 * dt;
+      p.x += p.vx * dt; p.z += p.vz * dt; p.y += p.vy * dt;
+      if (p.y < 0.22) { p.y = 0.22; p.vy *= -0.35; p.vx *= 0.6; p.vz *= 0.6; }
+      const dist = Math.hypot(p.x - h.x, p.z - h.z);
+      if (p.age > 0.25 && dist < 2.2) { p.x = lerp(p.x, h.x, Math.min(1, dt * 8)); p.z = lerp(p.z, h.z, Math.min(1, dt * 8)); }
+      if (p.age > 0.18 && dist < 0.85) {
+        if (p.kind === 'gold') { this.stats.gold += p.value; this.sound.playCoin(); }
+        else {
+          if (this.stats.hp < this.stats.maxHp) { this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + 4); h.healGlowTimer = 0.6; }
+          else this.stats.potions = Math.min(4, this.stats.potions + 1);
+          this.sound.playPotion();
+        }
+        this.pickups.splice(i, 1);
+        this._updateHUD();
+      }
+    }
+
+    // Traps (exact same time phase equation as GLSL!)
+    for (const tr of d.traps) {
+      if (tr.hitCooldown > 0) tr.hitCooldown -= dt;
+      if (tr.type === 'spikes') {
+        const cyc = (t * 0.9 + tr.phase) % 3.6;
+        const was = tr.active;
+        tr.active = cyc > 2.25 && cyc < 3.05;
+        if (tr.active && !was && Math.hypot(tr.x - h.x, tr.z - h.z) < 10) this.sound.playTrapSnap();
+        if (tr.active && tr.hitCooldown <= 0) {
+          if (Math.hypot(h.x - tr.x, h.z - tr.z) < 0.78) { this._damageHero(1, tr.x, tr.z); tr.hitCooldown = 0.9; }
+          for (const m of this.monsters) {
+            if (!m.dead && Math.hypot(m.x - tr.x, m.z - tr.z) < 0.85) {
+              m.hp -= 8; m.flashTimer = 0.14; tr.hitCooldown = 0.75;
+              if (m.hp <= 0) { m.dead = true; this.stats.slain++; this._spawnDeathBurst(m); this._updateHUD(); }
+            }
+          }
+        }
+      } else if (tr.type === 'blade') {
+        const swing = Math.sin(t * 2.15 + tr.phase) * 0.82;
+        const off = Math.sin(swing) * 2.18;
+        const bx = tr.x + (tr.axis === 'x' ? off : 0), bz = tr.z + (tr.axis === 'z' ? off : 0);
+        if (Math.abs(swing) < 0.34 && tr.hitCooldown <= 0 && Math.hypot(h.x - bx, h.z - bz) < 0.68) {
+          this._damageHero(1, bx, bz); tr.hitCooldown = 0.95;
+        }
+      }
+    }
+
+    // Monsters AI & Combat
+    let activeBoss = null;
+    for (const m of this.monsters) {
+      if (m.dead) continue;
+      if (m.type === 'boss') activeBoss = m;
+      const dx = h.x - m.x, dz = h.z - m.z, dist = Math.hypot(dx, dz);
+      if ((!this.stats.hasKey && m.roomId === d.exitRoomId) ? false : dist < 10.5) m.alerted = true;
+
+      m.knockX *= Math.exp(-dt * 9.5); m.knockZ *= Math.exp(-dt * 9.5);
+      if (m.atkCd > 0) m.atkCd -= dt;
+      if (m.flashTimer > 0) m.flashTimer = Math.max(0, m.flashTimer - dt);
+      if (m.swingAnim > 0) m.swingAnim = Math.max(0, m.swingAnim - dt);
+
+      let mvx = 0, mvz = 0;
+      if (m.alerted && dist < 15.0) {
+        m.angle += angleDiff(m.angle, Math.atan2(dx, dz)) * Math.min(1, dt * 10);
+        if (m.windup > 0) {
+          m.windup -= dt;
+          if (m.windup <= 0) {
+            m.swingAnim = 0.25; m.atkCd = m.atkBaseCd;
+            if (dist <= m.reach + h.radius + 0.32) this._damageHero(m.dmg, m.x, m.z);
+          }
+        } else if (dist <= m.reach && m.atkCd <= 0) {
+          m.windup = m.type === 'boss' ? 0.42 : 0.30;
+          if (Math.random() < 0.4) this.sound.playMonsterCry(m.type, false);
+        } else if (dist > m.reach * 0.84) {
+          mvx = (dx / (dist || 1)) * m.speed; mvz = (dz / (dist || 1)) * m.speed;
+        }
+      } else {
+        m.wanderTimer -= dt;
+        if (m.wanderTimer <= 0) {
+          m.wanderTimer = rand(1.4, 3.2);
+          const thx = m.homeX - m.x, thz = m.homeZ - m.z;
+          m.wanderAngle = Math.hypot(thx, thz) > 2.8 ? Math.atan2(thx, thz) : rand(0, 6.28);
+        }
+        mvx = Math.sin(m.wanderAngle) * m.speed * 0.32;
+        mvz = Math.cos(m.wanderAngle) * m.speed * 0.32;
+        m.angle += angleDiff(m.angle, m.wanderAngle) * Math.min(1, dt * 4);
+      }
+      m.vx = lerp(m.vx, mvx, Math.min(1, dt * 10));
+      m.vz = lerp(m.vz, mvz, Math.min(1, dt * 10));
+      m.x += (m.vx + m.knockX) * dt; m.z += (m.vz + m.knockZ) * dt;
+      this._resolveStaticCollision(m);
+      m.walkPhase += dt * (4.0 + Math.hypot(m.vx, m.vz) * 3.0);
+    }
+
+    if (activeBoss && !activeBoss.dead && Math.hypot(activeBoss.x - h.x, activeBoss.z - h.z) < 14) {
+      this.elBossWrap.classList.add('visible');
+      this.elBossFill.style.width = `${clamp((activeBoss.hp / activeBoss.maxHp) * 100, 0, 100)}%`;
+    } else this.elBossWrap.classList.remove('visible');
+
+    this._resolveActorSeparation();
+
+    // Keep combat lively (zero long empty stretches!)
+    this.lurkerTimer -= dt;
+    if (this.lurkerTimer <= 0 && !this.transitioning) {
+      this.lurkerTimer = 5.5;
+      const nearby = this.monsters.filter(m => !m.dead && Math.hypot(m.x - h.x, m.z - h.z) < 12.5).length;
+      if (nearby === 0 && this.monsters.filter(m => !m.dead).length < 24) {
+        const cands = [];
+        for (let gz = 2; gz < GRID_H - 2; gz++) for (let gx = 2; gx < GRID_W - 2; gx++) {
+          if (d.grid[gz][gx] !== CELL_FLOOR || (!this.stats.hasKey && d.roomMap[gz][gx] === d.exitRoomId)) continue;
+          const wx = gx * TILE, wz = gz * TILE, dist = Math.hypot(wx - h.x, wz - h.z);
+          if (dist >= 7.5 && dist <= 11.5) cands.push({ x: wx, z: wz, roomId: d.roomMap[gz][gx] });
+        }
+        if (cands.length > 0) {
+          const sp = cands[randInt(0, cands.length - 1)];
+          const s = this._spawnMonster(['rat', 'skeleton', 'slime'][randInt(0, 2)], sp.x, sp.z, sp.roomId);
+          s.alerted = true;
+        }
+      }
+    }
+
+    // Descend stairs to next deeper level!
+    if (!this.transitioning && this.stats.hasKey) {
+      if (Math.hypot(h.x - d.stairsTile.gx * TILE, h.z - d.stairsTile.gz * TILE) < 0.95) this._descendToNextLevel();
+    }
+
+    // Gibs physics (tumbling bones & bouncing slime goo!)
+    for (let i = this.gibs.length - 1; i >= 0; i--) {
+      const g = this.gibs[i];
+      g.life -= dt; g.vy -= 14.5 * dt;
+      g.x += g.vx * dt; g.y += g.vy * dt; g.z += g.vz * dt;
+      if (g.y < 0.08) { g.y = 0.08; g.vy *= g.kind === 1 ? -0.18 : -0.36; g.vx *= 0.65; g.vz *= 0.65; }
+      if (g.life < 1.2) g.scale = Math.max(0.05, g.scale - dt * 0.7);
+      if (g.life <= 0) this.gibs.splice(i, 1);
+    }
+
+    // Tight flame embers on nearby sconces/braziers
+    for (const fa of d.flameAnchors) {
+      if (Math.hypot(fa.x - h.x, fa.z - h.z) < 13 && Math.random() < dt * 2.5) {
+        this._spawnEmber(fa.x, fa.y, fa.z, 1.0, 0.56, 0.16, false);
+      }
+    }
+    for (const e of this.embers) {
+      if (e.life > 0) {
+        e.life -= dt;
+        e.x += e.vx * dt; e.y += e.vy * dt; e.z += e.vz * dt;
+        e.vy *= Math.exp(-dt * 0.8);
+        if (e.life <= 0) e.y = -99;
+      }
+    }
+
+    // Smooth camera follow + exact orthographic hero focus depth for tilt-shift
+    this.camShake = Math.max(0, this.camShake - dt * 1.4);
+    this.camTarget.x = lerp(this.camTarget.x, h.x + h.vx * 0.22, Math.min(1, dt * 4.8));
+    this.camTarget.z = lerp(this.camTarget.z, h.z + h.vz * 0.22, Math.min(1, dt * 4.8));
+    const shX = (Math.random() - 0.5) * this.camShake, shZ = (Math.random() - 0.5) * this.camShake;
+    const cx = this.camTarget.x + shX, cy = 0.55, cz = this.camTarget.z + shZ;
+    this.renderCamTarget = [cx, cy, cz];
+
+    // Project hero to orthographic ray depth & screen Y
+    const ox = cx - this.camF[0] * 36.0, oy = cy - this.camF[1] * 36.0, oz = cz - this.camF[2] * 36.0;
+    const rx = h.x - ox, ry = 0.72 - oy, rz = h.z - oz;
+    const hDepth = rx * this.camF[0] + ry * this.camF[1] + rz * this.camF[2];
+    const hUp = rx * this.camU[0] + ry * this.camU[1] + rz * this.camU[2];
+    this.focusDepth = lerp(this.focusDepth, clamp((hDepth - 24.0) / 28.0, 0, 1), Math.min(1, dt * 10));
+    this.focusY = lerp(this.focusY, clamp((hUp / this.camZoom) * 0.5 + 0.5, 0.2, 0.8), Math.min(1, dt * 10));
+
+    this.sound.update(dt, 0.5 + flick * 0.5);
+    this._updateStuckWatchdog(dt);
+  }
+
+  _descendToNextLevel() {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    this.sound.playStairs();
+    this._showToast(`DESCENDING TO DEPTH ${this.stats.depth + 1}...`, 1.4);
+    this.elFade.classList.add('active');
+    setTimeout(() => {
+      this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + 4);
+      this._loadLevel(this.stats.depth + 1);
+      setTimeout(() => { this.elFade.classList.remove('active'); this.transitioning = false; }, 160);
+    }, 440);
+  }
+
+  _render() {
+    const gl = this.gl, d = this.dungeon, h = this.hero, t = this.elapsed;
+
+    // Upload 36x36 dungeon map texture whenever doors/chests/level changed
+    if (this.mapDirty) {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.mapTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GRID_W, GRID_H, 0, gl.RGBA, gl.UNSIGNED_BYTE, d.mapData);
+      this.mapDirty = false;
+    }
+
+    // Pack closest warm & cold lights
+    const warmSorted = d.warmSources
+      .filter(s => !(s.isKey && (d.keyItem.collected || d.keyItem.guardedByBoss)))
+      .map(s => ({ s, dSq: (s.x - h.x) ** 2 + (s.z - h.z) ** 2 }))
+      .sort((a, b) => a.dSq - b.dSq);
+    for (let i = 0; i < MAX_WARM_LIGHTS; i++) {
+      const o = i * 4;
+      if (i < warmSorted.length && warmSorted[i].dSq < 260) {
+        const { s, dSq } = warmSorted[i];
+        const fade = clamp(1 - (Math.sqrt(dSq) - 11.5) / 5.2, 0, 1);
+        const fl = 0.88 + 0.16 * Math.sin(t * 11.5 + s.phase) + 0.08 * Math.cos(t * 21.3 + s.phase * 1.4);
+        this.warmPosBuf[o] = s.x; this.warmPosBuf[o + 1] = s.y; this.warmPosBuf[o + 2] = s.z; this.warmPosBuf[o + 3] = s.intensity * fl * fade;
+        this.warmColBuf[o] = s.color[0]; this.warmColBuf[o + 1] = s.color[1]; this.warmColBuf[o + 2] = s.color[2]; this.warmColBuf[o + 3] = s.phase;
+      } else this.warmPosBuf[o + 3] = 0;
+    }
+
+    const coldSorted = d.coldSources
+      .map(s => ({ s, dSq: (s.x - h.x) ** 2 + (s.z - h.z) ** 2 }))
+      .sort((a, b) => a.dSq - b.dSq);
+    for (let i = 0; i < MAX_COLD_LIGHTS; i++) {
+      const o = i * 4;
+      if (i < coldSorted.length && coldSorted[i].dSq < 240) {
+        const { s, dSq } = coldSorted[i];
+        const fade = clamp(1 - (Math.sqrt(dSq) - 11) / 5.0, 0, 1);
+        const pulse = 0.85 + 0.18 * Math.sin(t * 2.4 + s.phase);
+        this.coldPosBuf[o] = s.x; this.coldPosBuf[o + 1] = s.y; this.coldPosBuf[o + 2] = s.z; this.coldPosBuf[o + 3] = s.intensity * pulse * fade;
+        this.coldColBuf[o] = s.color[0]; this.coldColBuf[o + 1] = s.color[1]; this.coldColBuf[o + 2] = s.color[2]; this.coldColBuf[o + 3] = s.phase;
+      } else this.coldPosBuf[o + 3] = 0;
+    }
+
+    // Pack closest visible monsters
+    const mobSorted = this.monsters
+      .filter(m => !m.dead && (m.x - this.camTarget.x) ** 2 + (m.z - this.camTarget.z) ** 2 < 240)
+      .sort((a, b) => ((a.x - h.x) ** 2 + (a.z - h.z) ** 2) - ((b.x - h.x) ** 2 + (b.z - h.z) ** 2));
+    const mobCount = Math.min(MAX_MOBS, mobSorted.length);
+    for (let i = 0; i < mobCount; i++) {
+      const m = mobSorted[i], o = i * 4;
+      this.mob0Buf[o] = m.x; this.mob0Buf[o + 1] = m.z; this.mob0Buf[o + 2] = m.angle; this.mob0Buf[o + 3] = m.code;
+      this.mob1Buf[o] = m.walkPhase; this.mob1Buf[o + 1] = m.swingAnim; this.mob1Buf[o + 2] = m.flashTimer / 0.16; this.mob1Buf[o + 3] = clamp(m.hp / m.maxHp, 0, 1);
+      this.mob2Buf[o] = m.windup; this.mob2Buf[o + 1] = m.alerted ? 1 : 0; this.mob2Buf[o + 2] = m.radius; this.mob2Buf[o + 3] = 0;
+    }
+
+    // Pack Golden Key & loose pickups
+    let itemCount = 0;
+    if (!d.keyItem.collected && !d.keyItem.guardedByBoss && itemCount < MAX_ITEMS) {
+      const o = itemCount++ * 4;
+      this.itemBuf[o] = d.keyItem.x; this.itemBuf[o + 1] = 0.68 + Math.sin(t * 3.4) * 0.10; this.itemBuf[o + 2] = d.keyItem.z; this.itemBuf[o + 3] = 0;
+    }
+    for (const p of this.pickups) {
+      if (itemCount >= MAX_ITEMS) break;
+      const o = itemCount++ * 4;
+      this.itemBuf[o] = p.x; this.itemBuf[o + 1] = p.y + Math.sin(t * 4 + itemCount) * 0.05; this.itemBuf[o + 2] = p.z; this.itemBuf[o + 3] = p.code;
+    }
+
+    // Pack death gibs (bones & goo!)
+    const gibCount = Math.min(MAX_GIBS, this.gibs.length);
+    for (let i = 0; i < gibCount; i++) {
+      const g = this.gibs[i], o = i * 4;
+      this.gibBuf[o] = g.x; this.gibBuf[o + 1] = g.y; this.gibBuf[o + 2] = g.z; this.gibBuf[o + 3] = g.kind + clamp(g.scale, 0.05, 0.99);
+    }
+
+    // Pack flame embers & hit sparks
+    let emberCount = 0;
+    for (const e of this.embers) {
+      if (e.life <= 0) continue;
+      const o = emberCount++ * 4;
+      this.emberPosBuf[o] = e.x; this.emberPosBuf[o + 1] = e.y; this.emberPosBuf[o + 2] = e.z; this.emberPosBuf[o + 3] = clamp(e.life / e.maxLife, 0, 1);
+      this.emberColBuf[o] = e.r; this.emberColBuf[o + 1] = e.g; this.emberColBuf[o + 2] = e.b; this.emberColBuf[o + 3] = 1;
+    }
+
+    const movingFrac = clamp(Math.hypot(h.vx, h.vz) / 3.8, 0, 1);
+    const bob = Math.abs(Math.cos(h.walkPhase)) * 0.08 * movingFrac;
+    const flinchOrHeal = h.flinchTimer > 0 ? (h.flinchTimer / 0.24) : (h.healGlowTimer > 0 ? -(h.healGlowTimer / 0.85) : 0);
+    let swingP = -1, slashAlpha = 0;
+    if (h.swingTimer > 0) {
+      swingP = 1 - h.swingTimer / h.swingDuration;
+      if (swingP > 0.22 && swingP < 0.72) slashAlpha = Math.sin(((swingP - 0.22) / 0.50) * Math.PI) * 0.9;
+    }
+
+    gl.bindVertexArray(this.vao);
+
+    // ---- PASS 1: FULL 3D SDF RAYMARCH INTO REDUCED-RES HDR FBO ----
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFBO);
+    gl.viewport(0, 0, this.lowW, this.lowH);
+    gl.useProgram(this.progRay);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.mapTex);
+    gl.uniform1i(this.uRay.uMapTex, 0);
+    gl.uniform2f(this.uRay.uLowRes, this.lowW, this.lowH);
+    gl.uniform1f(this.uRay.uAspect, this.viewW / this.viewH);
+    gl.uniform1f(this.uRay.uCamZoom, this.camZoom);
+    gl.uniform1f(this.uRay.uTime, t);
+    gl.uniform1f(this.uRay.uDepthTint, ((this.stats.depth - 1) % 3) * 0.35);
+
+    gl.uniform3fv(this.uRay.uCamTarget, this.renderCamTarget);
+    gl.uniform3f(this.uRay.uHeroPos, h.x, bob, h.z);
+    gl.uniform4f(this.uRay.uHeroState, h.angle, h.walkPhase, movingFrac, flinchOrHeal);
+    gl.uniform4f(this.uRay.uHeroSwing, swingP, h.swingDir, slashAlpha, 0);
+    gl.uniform3fv(this.uRay.uHeroLightPos, this.heroLightPos);
+    gl.uniform3fv(this.uRay.uHeroLightCol, this.heroLightCol);
+
+    gl.uniform4fv(this.uRay['uWarmPos[0]'], this.warmPosBuf);
+    gl.uniform4fv(this.uRay['uWarmCol[0]'], this.warmColBuf);
+    gl.uniform4fv(this.uRay['uColdPos[0]'], this.coldPosBuf);
+    gl.uniform4fv(this.uRay['uColdCol[0]'], this.coldColBuf);
+
+    gl.uniform1i(this.uRay.uMobCount, mobCount);
+    gl.uniform4fv(this.uRay['uMob0[0]'], this.mob0Buf);
+    gl.uniform4fv(this.uRay['uMob1[0]'], this.mob1Buf);
+    gl.uniform4fv(this.uRay['uMob2[0]'], this.mob2Buf);
+
+    gl.uniform1i(this.uRay.uItemCount, itemCount);
+    gl.uniform4fv(this.uRay['uItems[0]'], this.itemBuf);
+    gl.uniform1i(this.uRay.uGibCount, gibCount);
+    gl.uniform4fv(this.uRay['uGibs[0]'], this.gibBuf);
+    gl.uniform1i(this.uRay.uEmberCount, emberCount);
+    gl.uniform4fv(this.uRay['uEmbers[0]'], this.emberPosBuf);
+    gl.uniform4fv(this.uRay['uEmberCols[0]'], this.emberColBuf);
+
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    // ---- PASS 2: HORIZONTAL DEPTH-AWARE OPTICAL TILT-SHIFT BLUR ----
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.blurFBO);
+    gl.viewport(0, 0, this.lowW, this.lowH);
+    gl.useProgram(this.progBlur);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.sceneTex);
+    gl.uniform1i(this.uBlur.uScene, 0);
+    gl.uniform2f(this.uBlur.uLowRes, this.lowW, this.lowH);
+    gl.uniform1f(this.uBlur.uFocusDepth, this.focusDepth);
+    gl.uniform1f(this.uBlur.uFocusY, this.focusY);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    // ---- PASS 3: VERTICAL TILT-SHIFT + SHARP FOCAL BAND + FILMIC sRGB + BAYER DITHER + GRAIN ----
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    gl.useProgram(this.progPost);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.sceneTex);
+    gl.uniform1i(this.uPost.uScene, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.blurTex);
+    gl.uniform1i(this.uPost.uBlurH, 1);
+    gl.uniform2f(this.uPost.uLowRes, this.lowW, this.lowH);
+    gl.uniform1f(this.uPost.uFocusDepth, this.focusDepth);
+    gl.uniform1f(this.uPost.uFocusY, this.focusY);
+    gl.uniform1f(this.uPost.uTime, t);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  _updateHUD() {
+    const full = `<svg class="heart-icon" viewBox="0 0 11 10">
+      <rect x="1" y="1" width="3" height="1" fill="#8f1e24"/><rect x="7" y="1" width="3" height="1" fill="#8f1e24"/>
+      <rect x="0" y="2" width="5" height="3" fill="#c93138"/><rect x="6" y="2" width="5" height="3" fill="#c93138"/>
+      <rect x="5" y="3" width="1" height="2" fill="#c93138"/><rect x="2" y="2" width="2" height="1" fill="#f07872"/>
+      <rect x="1" y="5" width="9" height="2" fill="#b3242b"/><rect x="2" y="7" width="7" height="1" fill="#8f1e24"/>
+      <rect x="4" y="8" width="3" height="1" fill="#6b151a"/><rect x="5" y="9" width="1" height="1" fill="#6b151a"/>
+    </svg>`;
+    const half = `<svg class="heart-icon" viewBox="0 0 11 10">
+      <rect x="1" y="1" width="3" height="1" fill="#8f1e24"/><rect x="7" y="1" width="3" height="1" fill="#2c3340"/>
+      <rect x="0" y="2" width="5" height="3" fill="#c93138"/><rect x="6" y="2" width="5" height="3" fill="#232934"/>
+      <rect x="5" y="3" width="1" height="2" fill="#232934"/><rect x="2" y="2" width="2" height="1" fill="#f07872"/>
+      <rect x="1" y="5" width="5" height="2" fill="#b3242b"/><rect x="6" y="5" width="4" height="2" fill="#232934"/>
+      <rect x="2" y="7" width="4" height="1" fill="#8f1e24"/><rect x="6" y="7" width="3" height="1" fill="#1b2029"/>
+      <rect x="4" y="8" width="2" height="1" fill="#6b151a"/><rect x="6" y="8" width="1" height="1" fill="#1b2029"/>
+      <rect x="5" y="9" width="1" height="1" fill="#6b151a"/>
+    </svg>`;
+    const empty = `<svg class="heart-icon" viewBox="0 0 11 10">
+      <rect x="1" y="1" width="3" height="1" fill="#2f3745"/><rect x="7" y="1" width="3" height="1" fill="#2f3745"/>
+      <rect x="0" y="2" width="5" height="3" fill="#222833"/><rect x="6" y="2" width="5" height="3" fill="#222833"/>
+      <rect x="5" y="3" width="1" height="2" fill="#222833"/><rect x="1" y="5" width="9" height="2" fill="#1c212b"/>
+      <rect x="2" y="7" width="7" height="1" fill="#171b24"/><rect x="4" y="8" width="3" height="1" fill="#141820"/>
+      <rect x="5" y="9" width="1" height="1" fill="#141820"/>
+    </svg>`;
+    let html = '';
+    for (let i = 0; i < Math.ceil(this.stats.maxHp / 2); i++) {
+      const rem = this.stats.hp - i * 2;
+      html += rem >= 2 ? full : (rem === 1 ? half : empty);
+    }
+    this.elHearts.innerHTML = html;
+    this.elPotions.textContent = String(this.stats.potions);
+    this.elKey.classList.toggle('active', this.stats.hasKey);
+    this.elGold.textContent = String(this.stats.gold);
+    this.elDepth.textContent = String(this.stats.depth);
+    this.elSlain.textContent = String(this.stats.slain);
+  }
+
+  _loop(now) {
+    requestAnimationFrame((ts) => this._loop(ts));
+    const dt = Math.min((now - this.lastTime) / 1000, 0.05);
+    this.lastTime = now;
+    this._update(dt);
+    this._render();
+  }
+}
+
+window.__game = new TorchlightDepthsShaderEngine();
+})();
+</script>
+</body>
+</html>
