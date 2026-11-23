@@ -182,9 +182,57 @@
     transition: opacity 0.42s ease;
   }
   #fade-overlay.active { opacity: 1; }
+
+  /* Opening title card: sits over the first seconds of play, then lifts away */
+  #title-card {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    text-align: center;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(5, 7, 11, 0.2) 0%, rgba(5, 7, 11, 0.86) 72%);
+    transition: opacity 1.4s ease, transform 1.4s ease;
+  }
+  #title-card h1 {
+    font-size: clamp(22px, 5.2vw, 58px);
+    font-weight: normal;
+    line-height: 1.35;
+    letter-spacing: 0.08em;
+    color: #f6dcab;
+    text-shadow: 0 0.07em 0 #5a2a10, 0 0.14em 0 #07090d, 0 0 0.9em rgba(255, 140, 50, 0.55);
+    animation: title-flicker 3.1s infinite;
+  }
+  #title-card p {
+    font-size: clamp(7px, 1.15vw, 12px);
+    letter-spacing: 0.42em;
+    color: #9ec0e0;
+    text-shadow: 0 2px 0 #05070a;
+  }
+  #title-rule {
+    width: min(46vw, 420px);
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #e0a25c, transparent);
+  }
+  @keyframes title-flicker {
+    0%, 100% { opacity: 1; }
+    42% { opacity: 0.93; }
+    47% { opacity: 1; }
+    71% { opacity: 0.88; }
+    76% { opacity: 0.98; }
+  }
+  #hud { transition: opacity 1.2s ease; }
+  #ctrl-hint { transition: color 0.3s ease, opacity 1.2s ease; }
+  body.intro #title-card { opacity: 1; }
+  body:not(.intro) #title-card { opacity: 0; transform: scale(1.04); }
+  body.intro #hud, body.intro #ctrl-hint, body.intro #toast { opacity: 0; }
 </style>
 </head>
-<body>
+<body class="intro">
 
 <canvas id="gl-canvas"></canvas>
 
@@ -268,6 +316,12 @@
 </button>
 
 <div id="fade-overlay"></div>
+
+<div id="title-card">
+  <div id="title-rule"></div>
+  <h1>TORCHLIGHT<br>DEPTHS</h1>
+  <p>A DUNGEON DRAWN IN LIGHT</p>
+</div>
 
 <script>
 (() => {
@@ -2369,6 +2423,8 @@ SurfMat evalMaterial(vec3 p, vec3 N, int matId, float entId) {
     slab *= mix(0.45, 1.0, crack);
     m.albedo = mix(vec3(0.055, 0.07, 0.095), slab, joint);
     m.normal = normalize(N + vec3((grit - 0.5) * 0.10, 0.0, (noise2(p.xz * 8.5 + 7.1) - 0.5) * 0.10));
+    // Damp patches: worn slabs hold a thin film of water that glints under the torch
+    m.rough = mix(0.90, 0.46, smoothstep(0.42, 0.78, noise2(p.xz * 0.85 + 3.7)) * joint);
 
     if (matId == MAT_FLOOR) {
       vec2 tcF = p.xz * 0.5 + 0.5;
@@ -2524,6 +2580,8 @@ vec3 evalPointLight(vec3 p, vec3 N, vec3 V, SurfMat m, vec3 lPos, vec3 lCol, flo
   vec3 H = normalize(L + V);
   float specPow = mix(96.0, 12.0, m.rough);
   float spec = pow(max(dot(N, H), 0.0), specPow) * mix(0.75, 0.04, m.rough);
+  // Schlick Fresnel: light skimming off wet stone and metal at grazing angles
+  spec *= 1.0 + pow(1.0 - max(dot(H, V), 0.0), 5.0) * mix(6.0, 1.5, m.rough);
   vec3 diff = m.albedo * ndl * (1.0 - m.metal * 0.65);
   vec3 specCol = mix(vec3(1.0), m.albedo, m.metal) * spec;
   return lCol * atten * (diff + specCol) * shadow;
@@ -2544,11 +2602,30 @@ vec3 shadeDirect(vec3 p, vec3 N, vec3 V, int matId, float entId, bool doShadow, 
   vec3 rimDir = normalize(vec3(-0.55, 0.78, -0.42));
   col += m.albedo * vec3(0.24, 0.36, 0.54) * max(dot(N, rimDir), 0.0) * 0.14;
 
-  // Crisp crevice AO on stone masonry & floor corners
+  // Multi-scale ambient occlusion: tight crevices, mid corners and broad room-scale darkening
+  float ao = 1.0;
   if (doShadow && matId != MAT_CAP) {
-    float aoD = mapStatic(p + N * 0.20, false).x;
-    col *= clamp(aoD / 0.20, 0.38, 1.0);
+    float a1 = clamp(mapStatic(p + N * 0.10, false).x / 0.10, 0.0, 1.0);
+    float a2 = clamp(mapStatic(p + N * 0.34, false).x / 0.34, 0.0, 1.0);
+    float a3 = clamp(mapStatic(p + N * 0.80, false).x / 0.80, 0.0, 1.0);
+    ao = mix(0.22, 1.0, a1 * 0.3 + a2 * 0.35 + a3 * 0.35);
+    // Soft contact shadows grounding the hero and monsters on the stone
+    if (entId == -1.0 && p.y < 1.2) {
+      vec2 dh = p.xz - uHeroPos.xz;
+      float blob = exp(-dot(dh, dh) * 3.4);
+      for (int i = 0; i < ${MAX_MOBS}; i++) {
+        if (i >= uMobCount) break;
+        vec2 dm = p.xz - uMob0[i].xy;
+        float r = uMob2[i].z;
+        blob = max(blob, exp(-dot(dm, dm) / (r * r * 2.4)));
+      }
+      ao *= 1.0 - 0.6 * blob * smoothstep(1.2, 0.0, p.y);
+    }
   }
+  col *= ao;
+
+  // Bump-mapped normal for the light response, so masonry relief catches the torch
+  vec3 Nl = m.normal;
 
   // Primary Hero Torch Light with REAL RAYMARCHED SOFT SHADOWS! (THE STAR!)
   float shadow = 1.0;
@@ -2556,22 +2633,35 @@ vec3 shadeDirect(vec3 p, vec3 N, vec3 V, int matId, float entId, bool doShadow, 
     int skipM = (entId >= 0.0) ? int(entId + 0.5) : -1;
     shadow = calcSoftShadow(p + N * 0.03, uHeroLightPos, skipM);
   }
-  col += evalPointLight(p, N, V, m, uHeroLightPos, uHeroLightCol, 4.9, shadow);
+  float aoHero = mix(1.0, ao, 0.4);
+  col += evalPointLight(p, Nl, V, m, uHeroLightPos, uHeroLightCol, 4.9, shadow * aoHero);
+
+  // Warm bounce: torchlight scattered off nearby stone fills the shadowed side with amber
+  vec3 toT = uHeroLightPos - p;
+  float dT2 = dot(toT, toT);
+  float bounce = 4.9 / (1.0 + 0.9 * dT2);
+  if (doShadow) bounce *= quickWallVis(p + N * 0.06, uHeroLightPos);
+  col += m.albedo * uHeroLightCol * bounce * ao * 0.05;
 
   // Pooled Warm Wall Sconces & Braziers (wall-occluded so rooms stay distinct!)
+  float aoFill = mix(1.0, ao, 0.7);
   for (int i = 0; i < ${MAX_WARM_LIGHTS}; i++) {
     if (uWarmPos[i].w > 0.01) {
       float vis = doShadow ? quickWallVis(p + N * 0.06, uWarmPos[i].xyz) : 1.0;
-      col += evalPointLight(p, N, V, m, uWarmPos[i].xyz, uWarmCol[i].rgb, uWarmPos[i].w, vis);
+      col += evalPointLight(p, Nl, V, m, uWarmPos[i].xyz, uWarmCol[i].rgb, uWarmPos[i].w, vis * aoFill);
     }
   }
   // Pooled Cold Cyan-Blue Accents (Magic Runes, Moonlight Grates, Stairs Mist)
   for (int i = 0; i < ${MAX_COLD_LIGHTS}; i++) {
     if (uColdPos[i].w > 0.01) {
       float vis = doShadow ? quickWallVis(p + N * 0.06, uColdPos[i].xyz) : 1.0;
-      col += evalPointLight(p, N, V, m, uColdPos[i].xyz, uColdCol[i].rgb, uColdPos[i].w, vis);
+      col += evalPointLight(p, Nl, V, m, uColdPos[i].xyz, uColdCol[i].rgb, uColdPos[i].w, vis * aoFill);
     }
   }
+
+  // Fresnel rim: glossy and metallic surfaces pick up the cold cavern sky and warm torch at glancing angles
+  float rim = pow(1.0 - max(dot(Nl, V), 0.0), 3.0) * (1.0 - m.rough);
+  col += mix(vec3(1.0), m.albedo, m.metal) * rim * ao * (skyAmb * 2.2 + uHeroLightCol * bounce * 0.3);
 
   col += m.emissive;
   return col;
@@ -2611,6 +2701,21 @@ vec3 shadePoint(vec3 p, vec3 N, vec3 V, int matId, float entId) {
   }
 
   return col;
+}
+
+// Unshadowed light arriving at a point in open air (drives mist, dust motes and glow)
+vec3 airLight(vec3 sp) {
+  vec3 d = uHeroLightPos - sp;
+  vec3 l = uHeroLightCol * 4.9 / (1.0 + 1.1 * dot(d, d));
+  for (int i = 0; i < ${MAX_WARM_LIGHTS}; i++) {
+    d = uWarmPos[i].xyz - sp;
+    l += uWarmCol[i].rgb * uWarmPos[i].w / (1.0 + 1.1 * dot(d, d));
+  }
+  for (int i = 0; i < ${MAX_COLD_LIGHTS}; i++) {
+    d = uColdPos[i].xyz - sp;
+    l += uColdCol[i].rgb * uColdPos[i].w / (1.0 + 1.1 * dot(d, d));
+  }
+  return l;
 }
 
 void main() {
@@ -2719,6 +2824,50 @@ void main() {
     }
   }
 
+  // 1b. Low floor mist pooling over the flagstones, lit by whatever fire is near
+  if (hit) {
+    float tTop = max(tStart, (0.42 - roBase.y) / rd.y);
+    float seg = min(hitT, -roBase.y / rd.y) - tTop;
+    if (seg > 0.0) {
+      vec3 mp = roBase + rd * (tTop + seg * 0.5);
+      float n = noise2(mp.xz * 0.5 + vec2(uTime * 0.05, -uTime * 0.035)) * 0.65
+              + noise2(mp.xz * 1.4 - vec2(uTime * 0.07, uTime * 0.04)) * 0.35;
+      // Only over walkable tiles, thinning out toward the dark edge of view
+      float onFloor = getTile(ivec2(floor(mp.xz * 0.5 + 0.5))).r >= ${G_FLOOR} ? 1.0 : 0.0;
+      vec2 dc = mp.xz - uCamTarget.xz;
+      float dens = seg * smoothstep(0.40, 0.80, n) * 0.5 * onFloor * exp(-dot(dc, dc) * 0.006);
+      col = col * (1.0 - dens * 0.45) + (vec3(0.045, 0.07, 0.115) + airLight(mp) * 0.085) * dens;
+    }
+  }
+
+  // 1c. Dust motes drifting through the light on two height layers
+  for (int k = 0; k < 2; k++) {
+    float tp = (0.8 + float(k) * 0.9 - roBase.y) / rd.y;
+    if (tp < hitT) {
+      vec3 sp = roBase + rd * tp;
+      vec2 g = sp.xz * 1.5 + float(k) * 17.3 + vec2(uTime * 0.03, 0.0);
+      float h = hash12(floor(g));
+      if (h > 0.4) {
+        vec2 c = 0.5 + 0.28 * vec2(sin(uTime * (0.3 + h) + h * 40.0), cos(uTime * (0.24 + h * 0.7) + h * 23.0));
+        float tw = 0.55 + 0.45 * sin(uTime * (0.8 + h * 1.7) + h * 90.0);
+        col += airLight(sp) * smoothstep(0.07, 0.02, length(fract(g) - c)) * tw * 0.11;
+      }
+    }
+  }
+
+  // 1d. Soft glow in the air around every sconce and brazier
+  for (int i = 0; i < ${MAX_WARM_LIGHTS}; i++) {
+    if (uWarmPos[i].w > 0.01) {
+      vec3 oc = uWarmPos[i].xyz - roBase;
+      float proj = dot(oc, rd);
+      if (proj < hitT + 0.8) {
+        vec3 pd = oc - rd * proj;
+        float d2 = dot(pd, pd);
+        col += uWarmCol[i].rgb * uWarmPos[i].w * (exp(-d2 * 16.0) * 0.07 + exp(-d2 * 1.5) * 0.012);
+      }
+    }
+  }
+
   // 2. Hero Sword Slash Crescent Arc (translucent steel + torch glint!)
   if (uHeroSwing.z > 0.01) {
     float tPlane = (0.84 - roBase.y) / rd.y;
@@ -2743,7 +2892,7 @@ void main() {
     float proj = dot(oc, rd);
     if (proj > 0.0 && proj < hitT + 0.8) {
       float d = length(oc - rd * proj);
-      col += uHeroLightCol * exp(-d * d * 18.0) * 0.55;
+      col += uHeroLightCol * (exp(-d * d * 18.0) * 0.55 + exp(-d * d * 1.3) * 0.045);
     }
   }
 
@@ -2847,17 +2996,59 @@ void main() {
 }
 `;
 
-// PASS 3: Vertical Tilt-Shift + Sharp Focal Band + Filmic sRGB + Subtle Bayer Dither + Vignette + Film Grain
+// BLOOM A: soft-knee bright pass fused with a horizontal Gaussian, written to a quarter-res target.
+// Reads the bilinear tilt-shift buffer; taps sit on texel corners so every scene texel is covered.
+const BLOOM_BRIGHT_FS = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uScene;
+uniform vec2 uLowRes;
+
+void main() {
+  vec3 acc = vec3(0.0);
+  for (int i = -6; i <= 6; i++) {
+    float w = exp(-float(i * i) / 18.0);
+    for (int j = -1; j <= 1; j += 2) {
+      vec3 s = min(texture(uScene, vUv + vec2(float(i) * 2.0, float(j)) / uLowRes).rgb, vec3(6.0));
+      float l = max(s.r, max(s.g, s.b));
+      acc += s * (max(l - 0.72, 0.0) / max(l, 0.0001)) * w;
+    }
+  }
+  fragColor = vec4(acc / 14.6, 1.0);
+}
+`;
+
+// BLOOM B: vertical 9-tap Gaussian (5 bilinear fetches) finishing the blur
+const BLOOM_BLUR_FS = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uScene;
+uniform vec2 uDir;
+
+void main() {
+  vec3 c = texture(uScene, vUv).rgb * 0.227027;
+  c += (texture(uScene, vUv + uDir * 1.384615).rgb + texture(uScene, vUv - uDir * 1.384615).rgb) * 0.316216;
+  c += (texture(uScene, vUv + uDir * 3.230769).rgb + texture(uScene, vUv - uDir * 3.230769).rgb) * 0.070270;
+  fragColor = vec4(c, 1.0);
+}
+`;
+
+// PASS 3: Vertical Tilt-Shift + Sharp Focal Band + Bloom + Filmic sRGB + Subtle Bayer Dither + Vignette + Film Grain
 const POST_FS = `#version 300 es
 precision highp float;
 in vec2 vUv;
 out vec4 fragColor;
 uniform sampler2D uScene;
 uniform sampler2D uBlurH;
+uniform sampler2D uBloom;
 uniform vec2 uLowRes;
 uniform float uFocusDepth;
 uniform float uFocusY;
 uniform float uTime;
+uniform vec2 uSub;  // sub-texel camera remainder (the scene is rendered on a snapped texel grid)
+uniform vec4 uFx;   // x: iris opening 0..1, y: hurt flash, z: second-wind flash, w: low-health pulse
 ${TILT_COC_GLSL}
 
 // Canonical 8x8 Bayer ordered dither matrix normalized to [0, 1]
@@ -2879,20 +3070,23 @@ vec3 toneMapFilmic(vec3 x) {
 
 void main() {
   // Snap sharp-band UV onto the low-res pixel grid for crafted slightly chunky pixel feel
-  vec2 snapUv = (floor(vUv * uLowRes) + 0.5) / uLowRes;
+  // The scene was rendered with the camera snapped to whole texels (no texture shimmer while
+  // scrolling); adding the remainder back here keeps the motion perfectly smooth.
+  vec2 uv = vUv + uSub;
+  vec2 snapUv = (floor(uv * uLowRes) + 0.5) / uLowRes;
   float centerCoC = getCoC(snapUv);
   vec3 sharpCol = texture(uScene, snapUv).rgb;
 
   vec3 col = sharpCol;
   if (centerCoC > 0.01) {
     float stepY = (centerCoC * 1.85) / uLowRes.y;
-    vec3 acc = texture(uBlurH, vUv).rgb * 1.15;
+    vec3 acc = texture(uBlurH, uv).rgb * 1.15;
     float wSum = 1.15;
     for (int i = -6; i <= 6; i++) {
       if (i == 0) continue;
       float fi = float(i);
       float gauss = exp(-(fi * fi) / 14.0);
-      vec2 sUv = clamp(vUv + vec2(0.0, fi * stepY), vec2(0.002), vec2(0.998));
+      vec2 sUv = clamp(uv + vec2(0.0, fi * stepY), vec2(0.002), vec2(0.998));
       float sCoC = getCoC(sUv);
       float w = gauss * mix(0.25, 1.0, smoothstep(0.0, centerCoC + 0.14, sCoC));
       vec3 sCol = texture(uBlurH, sUv).rgb;
@@ -2904,6 +3098,12 @@ void main() {
     vec3 blurCol = acc / wSum;
     col = mix(sharpCol, blurCol, smoothstep(0.01, 0.16, centerCoC));
   }
+
+  // Bloom: flames, embers, glowing eyes and runes bleed light into the dark around them
+  col += texture(uBloom, uv).rgb * 0.8;
+
+  // Second wind: the torch flares back to life
+  col += vec3(1.0, 0.6, 0.28) * uFx.z * uFx.z * 0.2;
 
   // Filmic tone map + proper linear-to-sRGB so shadow shapes stay clearly readable blue-grey
   col = toneMapFilmic(col);
@@ -2918,7 +3118,7 @@ void main() {
   col *= mix(shadowTint, warmTint, smoothstep(0.18, 0.62, luma));
 
   // SUBTLE Ordered Bayer Dither across many tonal levels (fine gradient texture, NEVER screen-door!)
-  float b = bayer8(vUv * uLowRes) - 0.5;
+  float b = bayer8(uv * uLowRes) - 0.5;
   float levels = 28.0;
   float gradMask = smoothstep(0.04, 0.18, luma) * (1.0 - smoothstep(0.72, 0.98, luma) * 0.55);
   float ditherStrength = 0.60 * gradMask;
@@ -2929,6 +3129,18 @@ void main() {
   vec2 vc = (vUv - 0.5) * vec2(1.14, 1.02);
   float vig = 1.0 - smoothstep(0.46, 1.08, dot(vc, vc) * 1.26);
   col *= mix(0.52, 1.0, vig);
+
+  // Damage feedback: blood-red edges on a hit, a slow heartbeat when health is low,
+  // and the colour draining out for a moment on a second wind
+  float edge = smoothstep(0.10, 0.62, dot(vc, vc));
+  float hurt = clamp(uFx.y + uFx.w * (0.55 + 0.45 * sin(uTime * 5.2)), 0.0, 1.0);
+  col = mix(col, vec3(0.50, 0.03, 0.02) + col * vec3(0.9, 0.25, 0.2), edge * hurt * 0.72);
+  col = mix(col, vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), uFx.z * 0.5);
+
+  // Iris wipe closing on the hero between depths, on the chunky pixel grid
+  vec2 ic = (snapUv - vec2(0.5, uFocusY)) * vec2(uLowRes.x / uLowRes.y, 1.0);
+  float irisR = uFx.x * (0.75 + 0.6 * uLowRes.x / uLowRes.y);
+  col *= uFx.x >= 1.0 ? 1.0 : step(length(ic), irisR);
 
   // Light animated monochrome film grain
   float grainSeed = dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233)) + fract(uTime * 17.31) * 43.7;
@@ -2958,6 +3170,8 @@ class TorchlightDepthsShaderEngine {
     this.progRay  = this._createProgram(FULLSCREEN_VS, RAYMARCH_FS);
     this.progBlur = this._createProgram(FULLSCREEN_VS, BLUR_H_FS);
     this.progPost = this._createProgram(FULLSCREEN_VS, POST_FS);
+    this.progBright = this._createProgram(FULLSCREEN_VS, BLOOM_BRIGHT_FS);
+    this.progGauss = this._createProgram(FULLSCREEN_VS, BLOOM_BLUR_FS);
 
     this.uRay  = this._cacheUniforms(this.progRay, [
       'uMapTex', 'uLowRes', 'uAspect', 'uCamZoom', 'uTime', 'uDepthTint',
@@ -2968,7 +3182,9 @@ class TorchlightDepthsShaderEngine {
       'uEmberCount', 'uEmbers[0]', 'uEmberCols[0]'
     ]);
     this.uBlur = this._cacheUniforms(this.progBlur, ['uScene', 'uLowRes', 'uFocusDepth', 'uFocusY']);
-    this.uPost = this._cacheUniforms(this.progPost, ['uScene', 'uBlurH', 'uLowRes', 'uFocusDepth', 'uFocusY', 'uTime']);
+    this.uPost = this._cacheUniforms(this.progPost, ['uScene', 'uBlurH', 'uBloom', 'uLowRes', 'uFocusDepth', 'uFocusY', 'uTime', 'uSub', 'uFx']);
+    this.uBright = this._cacheUniforms(this.progBright, ['uScene', 'uLowRes']);
+    this.uGauss = this._cacheUniforms(this.progGauss, ['uScene', 'uDir']);
 
     // Empty VAO for fullscreen triangle draw calls
     this.vao = gl.createVertexArray();
@@ -3010,6 +3226,8 @@ class TorchlightDepthsShaderEngine {
     this.camTarget = { x: 0, y: 0.55, z: 0 };
     this.camShake = 0;
     this.focusDepth = 0.45;
+    this.subTexel = [0, 0];
+    this.fx = { hurt: 0, flare: 0, iris: 0, irisTarget: 1, irisSpeed: 0.9 };
     this.focusY = 0.50;
 
     // Render targets
@@ -3071,6 +3289,9 @@ class TorchlightDepthsShaderEngine {
     this.elFade = document.getElementById('fade-overlay');
 
     this._bindEvents();
+    // Title card lifts after a few seconds, or immediately once the player touches a key
+    this.endIntro = () => document.body.classList.remove('intro');
+    setTimeout(this.endIntro, 3600);
     this._loadLevel(1);
     this._updateHUD();
     this._loop(performance.now());
@@ -3145,6 +3366,11 @@ class TorchlightDepthsShaderEngine {
 
     if (this.sceneFBO) { gl.deleteFramebuffer(this.sceneFBO); gl.deleteTexture(this.sceneTex); }
     if (this.blurFBO)  { gl.deleteFramebuffer(this.blurFBO);  gl.deleteTexture(this.blurTex); }
+    for (const b of this.bloom || []) { gl.deleteFramebuffer(b.fbo); gl.deleteTexture(b.tex); }
+
+    // Bloom: two quarter-res targets (bright pass + horizontal blur, then vertical blur)
+    const bw = Math.max(1, Math.round(this.lowW / 4)), bh = Math.max(1, Math.round(this.lowH / 4));
+    this.bloom = [0, 1].map(() => Object.assign(this._createFBO(bw, bh, true), { w: bw, h: bh }));
 
     const s = this._createFBO(this.lowW, this.lowH, false);
     this.sceneFBO = s.fbo; this.sceneTex = s.tex;
@@ -3164,6 +3390,7 @@ class TorchlightDepthsShaderEngine {
         e.preventDefault();
         this.keys[e.code] = true;
         markManual();
+        this.endIntro();
       }
     });
     window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
@@ -3385,6 +3612,7 @@ class TorchlightDepthsShaderEngine {
     this.hero.flinchTimer = 0.24;
     this.hero.invulnTimer = 0.62;
     this.camShake = Math.max(this.camShake, 0.16);
+    this.fx.hurt = 1;
     const dx = this.hero.x - fromX, dz = this.hero.z - fromZ, len = Math.hypot(dx, dz) || 1;
     this.hero.knockX += (dx / len) * 5.2; this.hero.knockZ += (dz / len) * 5.2;
     this.sound.playHeroHurt();
@@ -3397,6 +3625,7 @@ class TorchlightDepthsShaderEngine {
       this.hero.invulnTimer = 1.6;
       this.hero.healGlowTimer = 1.0;
       this._showToast('TORCHLIGHT REKINDLED — SECOND WIND!', 2.4);
+      this.fx.flare = 1;
       for (let i = 0; i < 12; i++) this._spawnEmber(this.hero.x, 0.8, this.hero.z, 1.0, 0.65, 0.25, true);
       for (const m of this.monsters) {
         if (m.dead) continue;
@@ -3950,7 +4179,19 @@ class TorchlightDepthsShaderEngine {
     this.camTarget.z = lerp(this.camTarget.z, h.z + h.vz * 0.22, Math.min(1, dt * 4.8));
     const shX = (Math.random() - 0.5) * this.camShake, shZ = (Math.random() - 0.5) * this.camShake;
     const cx = this.camTarget.x + shX, cy = 0.55, cz = this.camTarget.z + shZ;
-    this.renderCamTarget = [cx, cy, cz];
+    // Snap the camera to whole low-res texels along the screen axes so stone textures never
+    // shimmer while scrolling; the leftover fraction is re-applied as a UV offset in the post pass.
+    const R = this.camR, U = this.camU;
+    const texW = (2 * this.camZoom * (this.viewW / this.viewH)) / this.lowW, texH = (2 * this.camZoom) / this.lowH;
+    const a = cx * R[0] + cy * R[1] + cz * R[2], b = cx * U[0] + cy * U[1] + cz * U[2];
+    const ra = a - Math.round(a / texW) * texW, rb = b - Math.round(b / texH) * texH;
+    this.renderCamTarget = [cx - R[0] * ra - U[0] * rb, cy - R[1] * ra - U[1] * rb, cz - R[2] * ra - U[2] * rb];
+    this.subTexel = [ra / (texW * this.lowW), rb / (texH * this.lowH)];
+
+    // Screen effects: hurt flash and second-wind flare decay, iris eases toward its target
+    this.fx.hurt = Math.max(0, this.fx.hurt - dt * 2.6);
+    this.fx.flare = Math.max(0, this.fx.flare - dt * 1.1);
+    this.fx.iris = clamp(this.fx.iris + Math.sign(this.fx.irisTarget - this.fx.iris) * dt * this.fx.irisSpeed, 0, 1);
 
     // Project hero to orthographic ray depth & screen Y
     const ox = cx - this.camF[0] * 36.0, oy = cy - this.camF[1] * 36.0, oz = cz - this.camF[2] * 36.0;
@@ -3969,11 +4210,12 @@ class TorchlightDepthsShaderEngine {
     this.transitioning = true;
     this.sound.playStairs();
     this._showToast(`DESCENDING TO DEPTH ${this.stats.depth + 1}...`, 1.4);
-    this.elFade.classList.add('active');
+    // Iris closes on the hero, the next depth loads in the dark, then it opens again
+    this.fx.irisTarget = 0; this.fx.irisSpeed = 2.6;
     setTimeout(() => {
       this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + 4);
       this._loadLevel(this.stats.depth + 1);
-      setTimeout(() => { this.elFade.classList.remove('active'); this.transitioning = false; }, 160);
+      setTimeout(() => { this.fx.irisTarget = 1; this.fx.irisSpeed = 1.5; this.transitioning = false; }, 160);
     }, 440);
   }
 
@@ -4122,7 +4364,23 @@ class TorchlightDepthsShaderEngine {
     gl.uniform1f(this.uBlur.uFocusY, this.focusY);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-    // ---- PASS 3: VERTICAL TILT-SHIFT + SHARP FOCAL BAND + FILMIC sRGB + BAYER DITHER + GRAIN ----
+    // ---- BLOOM: BRIGHT PASS + HORIZONTAL BLUR -> VERTICAL BLUR (QUARTER RES) ----
+    const [b0, b1] = this.bloom;
+    gl.viewport(0, 0, b0.w, b0.h);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, b0.fbo);
+    gl.useProgram(this.progBright);
+    gl.bindTexture(gl.TEXTURE_2D, this.blurTex);
+    gl.uniform1i(this.uBright.uScene, 0);
+    gl.uniform2f(this.uBright.uLowRes, this.lowW, this.lowH);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, b1.fbo);
+    gl.useProgram(this.progGauss);
+    gl.bindTexture(gl.TEXTURE_2D, b0.tex);
+    gl.uniform1i(this.uGauss.uScene, 0);
+    gl.uniform2f(this.uGauss.uDir, 0, 0.85 / b0.h);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    // ---- PASS 3: VERTICAL TILT-SHIFT + SHARP FOCAL BAND + BLOOM + FILMIC sRGB + BAYER DITHER + GRAIN ----
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.useProgram(this.progPost);
@@ -4132,6 +4390,13 @@ class TorchlightDepthsShaderEngine {
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.blurTex);
     gl.uniform1i(this.uPost.uBlurH, 1);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, b1.tex);
+    gl.uniform1i(this.uPost.uBloom, 2);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.uniform2fv(this.uPost.uSub, this.subTexel);
+    const lowHp = this.stats.hp <= 3 ? 0.5 - this.stats.hp * 0.1 : 0;
+    gl.uniform4f(this.uPost.uFx, this.fx.iris, this.fx.hurt, this.fx.flare, lowHp);
     gl.uniform2f(this.uPost.uLowRes, this.lowW, this.lowH);
     gl.uniform1f(this.uPost.uFocusDepth, this.focusDepth);
     gl.uniform1f(this.uPost.uFocusY, this.focusY);
