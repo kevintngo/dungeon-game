@@ -258,6 +258,9 @@ const squeeze = (markup) => markup.replace(/>\s+</g, '><').replace(/\s+/g, ' ').
 const result = `${squeeze(head)}<style>${minCss}</style>${squeeze(body)}<script>${minJs}</script>${squeeze(tail)}\n`;
 fs.mkdirSync(OUT_DIR, { recursive: true });
 fs.writeFileSync(OUT, result);
+// Link-preview image referenced by the Open Graph tags; ships next to the page.
+const OG_IMAGE = path.join(__dirname, 'og.jpg');
+if (fs.existsSync(OG_IMAGE)) fs.copyFileSync(OG_IMAGE, path.join(OUT_DIR, 'og.jpg'));
 
 const kb = (n) => (n / 1000).toFixed(1) + ' kB';
 const size = Buffer.byteLength(result);
